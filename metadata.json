@@ -1,0 +1,6 @@
+{
+  "name": "Apna Kamra Jaipur - Affordable Rental Housing",
+  "description": "Lightweight mobile-first housing rental app for low-income workers and families in Jaipur with direct owner calling, Hindi/English toggle, locality search, budget filters, and admin management section.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

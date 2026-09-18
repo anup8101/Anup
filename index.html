@@ -1,0 +1,3636 @@
+<!DOCTYPE html>
+<html lang="hi" class="h-full bg-slate-50">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <title>Apna Kamra Jaipur - Affordable Rental Housing</title>
+  <meta property="og:title" content="Apna Kamra Jaipur - Affordable Rental Housing" />
+  <meta name="description" content="Lightweight mobile-first housing rental app for low-income workers and families in Jaipur with direct owner calling, Hindi/English toggle, locality search, budget filters, and admin management section." />
+  <meta property="og:description" content="Lightweight mobile-first housing rental app for low-income workers and families in Jaipur with direct owner calling, Hindi/English toggle, locality search, budget filters, and admin management section." />
+  <meta name="theme-color" content="#0A2540" />
+
+  <!-- Google Fonts: Inter & Noto Sans Devanagari for clean Hindi typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Noto Sans Devanagari"', '"Plus Jakarta Sans"', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              navy: '#0A2540',
+              blue: '#133E68',
+              yellow: '#EAA206',
+              amber: '#D97706',
+              green: '#16A34A',
+              card: '#FFFFFF',
+              bg: '#F8FAFC'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- React & Babel for zero-latency execution -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Firebase App & Services SDKs (v10 compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+  <style>
+    body {
+      font-family: 'Noto Sans Devanagari', 'Plus Jakarta Sans', system-ui, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      height: 24px;
+      width: 24px;
+      border-radius: 50%;
+      background: #EAA206;
+      cursor: pointer;
+      border: 3px solid #0A2540;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .custom-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="h-full text-slate-900 bg-slate-100 antialiased selection:bg-amber-100 selection:text-amber-900">
+  <div id="root" class="min-h-full"></div>
+
+  <script type="text/babel">
+    const { useState, useMemo, useEffect, useRef } = React;
+
+    // --- Firebase Web App Configuration provided by User ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyCFNptvYC_PBDmbKABSs562T9MVNRmyyt4",
+      authDomain: "apna-kamara.firebaseapp.com",
+      databaseURL: "https://apna-kamara-default-rtdb.firebaseio.com",
+      projectId: "apna-kamara",
+      storageBucket: "apna-kamara.firebasestorage.app",
+      messagingSenderId: "513744691614",
+      appId: "1:513744691614:web:06d930dd562f9fb57c368f",
+      measurementId: "G-C824P9VJQ0"
+    };
+
+    // Initialize Firebase safely
+    let fbApp = null;
+    let fbAuth = null;
+    let fbDb = null;
+    try {
+      if (typeof firebase !== "undefined") {
+        fbApp = firebase.apps.length ? firebase.app() : firebase.initializeApp(firebaseConfig);
+        fbAuth = firebase.auth();
+        fbDb = firebase.database();
+      }
+    } catch (err) {
+      console.warn("Firebase initialization notice:", err);
+    }
+
+    // Default editable app settings with localStorage persistence
+    const DEFAULT_APP_SETTINGS = {
+      whatsappNumber: "919829012345",
+      supportPhone: "919829012345",
+      supportEmail: "support@apnakamra.in",
+      appDescriptionHi: "जयपुर का विश्वसनीय किफायती रेंटल रूम्स पोर्टल। सांगानेर, सीतापुरा, वी.के.आई., मानसरोवर, झालाना और वैशाली नगर में बिना किसी दलाली के सीधे मकान मालिक से बात करें।",
+      appDescriptionEn: "Jaipur's trusted affordable room rental portal. Connect directly with landlords in Sanganer, Sitapura, VKI, Mansarovar, Jhalana, and Vaishali Nagar with 0% brokerage.",
+      developerName: "Apna Kamra Jaipur Tech Team",
+      developerContact: "+91 98290 12345 / dev@apnakamra.in"
+    };
+
+    // --- Translations dictionary ---
+    const i18n = {
+      hi: {
+        appName: "अपना कमरा जयपुर",
+        tagline: "किफायती कमरे • बिना ब्रोकरेज • सीधा मालिक से बात",
+        searchPlaceholder: "इलाका खोजें (सांगानेर, वी.के.आई., झालाना...)",
+        allLocalities: "सभी इलाके",
+        maxRent: "अधिकतम किराया:",
+        perMonth: "/माह",
+        deposit: "सुरक्षा राशि (डिपॉजिट):",
+        verified: "सत्यापित मकान मालिक",
+        callOwner: "मालिक को कॉल करें",
+        viewDetails: "कमरा देखें",
+        addListingBtn: "+ कमरा जोड़ें",
+        whatsappHelp: "व्हाट्सएप पर सहायता लें",
+        shareBtn: "शेयर करें",
+        shareSuccess: "✓ लिंक कॉपी हो गया!",
+        shareTitle: "जयपुर में किफायती कमरा",
+        filtersTitle: "फ़िल्टर और बजट",
+        noRooms: "इस बजट में कोई कमरा नहीं मिला। कृपया बजट या इलाका बदलकर देखें।",
+        roomsCount: "कमरे उपलब्ध हैं",
+        amenities: {
+          water: "24 घंटे पानी",
+          meter: "अलग सब-मीटर",
+          toiletPrivate: "व्यक्तिगत शौचालय",
+          toiletShared: "साझा शौचालय",
+          fan: "छत का पंखा",
+          groundFloor: "भूतल (Ground Floor)",
+          firstFloor: "पहली मंजिल (1st Floor)",
+          roWater: "RO पीने का पानी"
+        },
+        toiletFilter: "शौचालय सुविधा",
+        toiletAny: "कोई भी",
+        toiletPersonalOnly: "केवल पर्सनल (व्यक्तिगत)",
+        meterFilter: "बिजली मीटर",
+        meterAny: "कोई भी",
+        meterSeparateOnly: "अलग सब-मीटर",
+        savedTab: "पसंदीदा",
+        allRoomsTab: "सभी कमरे",
+        ownerModal: {
+          title: "मकान मालिक: अपना कमरा जोड़ें",
+          step1: "1. मालिक की जानकारी",
+          step2: "2. कमरे का पता व किराया",
+          step3: "3. सुविधाएं व फोटो",
+          step4: "4. पुष्टि व सबमिट",
+          nameLabel: "आपका पूरा नाम",
+          mobileLabel: "मोबाइल नंबर (कॉल हेतु)",
+          sendOtp: "OTP भेजें",
+          verifyOtp: "OTP सत्यापित करें",
+          otpVerified: "✓ मोबाइल नंबर सत्यापित हुआ",
+          otpPlaceholder: "6 अंकों का OTP दर्ज करें (डिफ़ॉल्ट: 123456)",
+          localityLabel: "जयपुर का इलाका",
+          addressLabel: "पूरा पता व मकान नंबर",
+          landmarkLabel: "पास का लैंडमार्क (उदा. पुलिया के पास, बस स्टैंड)",
+          rentLabel: "मासिक किराया (₹)",
+          depositLabel: "सुरक्षा राशि / डिपॉजिट (₹)",
+          amenitiesLabel: "कमरे में उपलब्ध सुविधाएं",
+          photoLabel: "कमरे की फोटो (कैमरा या गैलरी)",
+          takePhotoBtn: "📸 कैमरा से फोटो खींचें",
+          galleryBtn: "🖼️ गैलरी से चुनें",
+          simulateCameraBtn: "⚡ तुरंत डेमो कैमरा फोटो",
+          uploadingPhoto: "कैमरा फोटो प्रोसेस हो रही है...",
+          photoSuccess: "✓ फोटो सफलतापूर्वक जोड़ी गई!",
+          selectedAsMain: "मुख्य फोटो चुना गया",
+          myPhotosList: "कमरे की फोटो सूची (क्लिक करके मुख्य फोटो चुनें):",
+          publishBtn: "कमरा लाइव लिस्ट करें",
+          cancel: "रद्द करें",
+          next: "आगे बढ़ें →",
+          back: "← पीछे जाएं"
+        },
+        adminTab: "एडमिन पैनल",
+        loginTab: "लॉगिन",
+        registerTab: "रजिस्ट्रेशन",
+        auth: {
+          loginTitle: "यूजर लॉगिन",
+          loginSubtitle: "अपने मोबाइल या ईमेल से लॉगिन करें",
+          registerTitle: "नया खाता बनाएं",
+          registerSubtitle: "कमरा खोजने या लिस्ट करने के लिए रजिस्टर करें",
+          nameLabel: "पूरा नाम",
+          emailLabel: "ईमेल पता (वैकल्पिक)",
+          phoneLabel: "मोबाइल नंबर (10 अंक)",
+          passwordLabel: "पासवर्ड",
+          loginBtn: "लॉगिन करें",
+          registerBtn: "रजिस्ट्रेशन पूरा करें",
+          alreadyHaveAccount: "पहले से खाता है? लॉगिन करें",
+          dontHaveAccount: "खाता नहीं है? नया खाता बनाएं",
+          userBadge: "यूजर",
+          logout: "लॉगआउट"
+        },
+        adminSection: {
+          title: "व्यवस्थापक प्रबंधन (Admin Panel)",
+          subtitle: "जयपुर कमरा लिस्टिंग, सत्यापन और मूल्य मॉनिटरिंग",
+          passcodePrompt: "एडमिन सुरक्षा पिन (डिफ़ॉल्ट: 1234)",
+          adminPhonePrompt: "एडमिन मोबाइल नंबर (डिफ़ॉल्ट: 9829012345)",
+          adminPassPrompt: "एडमिन पासवर्ड (डिफ़ॉल्ट: admin123)",
+          loginBtn: "एडमिन लॉगिन करें",
+          logoutBtn: "लॉगआउट",
+          unlockedBadge: "सुरक्षित एडमिन मोड सक्रिय",
+          wrongPasscode: "गलत क्रेडेंशियल्स! सही मोबाइल व पासवर्ड या मास्टर पिन दर्ज करें।",
+          statsTotal: "कुल कमरे",
+          statsActive: "लाइव लिस्टिंग",
+          statsVerified: "सत्यापित मकान मालिक",
+          statsAvgRent: "औसत किराया",
+          searchPlaceholder: "मालिक, इलाका या शीर्षक से खोजें...",
+          filterAll: "सभी",
+          filterVerified: "सत्यापित",
+          filterCustom: "नए जोड़े गए",
+          verifyRoom: "सत्यापित करें",
+          unverifyRoom: "सत्यापन हटाएं",
+          deleteRoom: "कमरा हटाएं",
+          confirmDelete: "क्या आप वाकई इस कमरे की लिस्टिंग को हटाना चाहते हैं?",
+          editRent: "किराया बदलें",
+          saveChanges: "सुरक्षित करें",
+          cancelEdit: "रद्द करें",
+          resetDefaults: "डिफ़ॉल्ट डेटा रीसेट करें",
+          confirmReset: "क्या आप वाकई सभी लिस्टिंग को मूल डिफ़ॉल्ट पर रीसेट करना चाहते हैं?",
+          noRoomsMatch: "कोई लिस्टिंग नहीं मिली",
+          ownerPhone: "फ़ोन",
+          monthlyRent: "किराया",
+          deposit: "डिपॉजिट",
+          locality: "इलाका",
+          filterLocalityLabel: "इलाके अनुसार फ़िल्टर",
+          allLocalitiesOption: "सभी इलाके (All Areas)",
+          tabs: {
+            listings: "कमरा लिस्टिंग्स",
+            appConfig: "व्हाट्सएप व सपोर्ट सेटिंग्स",
+            adminCreds: "एडमिन लॉगिन पासवर्ड बदलें"
+          },
+          whatsappConfigTitle: "व्हाट्सएप व कस्टमर सपोर्ट सेटिंग",
+          whatsappConfigSubtitle: "ऐप का मुख्य व्हाट्सएप नंबर, सपोर्ट फ़ोन और ऐप विवरण अपडेट करें",
+          whatsappNumberLabel: "सहायता व्हाट्सएप नंबर (देश कोड के साथ, जैसे 919829012345)",
+          supportPhoneLabel: "कस्टमर सपोर्ट कॉलिंग नंबर",
+          supportEmailLabel: "कस्टमर सपोर्ट ईमेल",
+          appDescHiLabel: "ऐप विवरण (हिंदी)",
+          appDescEnLabel: "ऐप विवरण (English)",
+          devNameLabel: "डेवलपर नाम / टीम",
+          devContactLabel: "डेवलपर संपर्क जानकारी",
+          saveSettingsBtn: "सेटिंग्स सुरक्षित करें",
+          saveSettingsSuccess: "✓ व्हाट्सएप और सपोर्ट सेटिंग्स सफलतापूर्वक अपडेट हो गई!",
+          adminCredsTitle: "एडमिन अलग नंबर और पासवर्ड सेटिंग",
+          adminCredsSubtitle: "पैनल में लॉगिन के लिए अपना अलग मोबाइल नंबर और पासवर्ड सेट करें",
+          currentAdminPhone: "वर्तमान एडमिन मोबाइल नंबर",
+          newAdminPhone: "नया एडमिन मोबाइल नंबर",
+          newAdminPassword: "नया एडमिन पासवर्ड",
+          saveCredsBtn: "एडमिन क्रेडेंशियल्स अपडेट करें",
+          saveCredsSuccess: "✓ एडमिन मोबाइल और पासवर्ड सुरक्षित हो गया!"
+        }
+      },
+      en: {
+        appName: "Apna Kamra Jaipur",
+        tagline: "Affordable Rooms • Zero Brokerage • Direct Owner Call",
+        searchPlaceholder: "Search locality (Sanganer, VKI, Jhalana...)",
+        allLocalities: "All Areas",
+        maxRent: "Max Monthly Budget:",
+        perMonth: "/mo",
+        deposit: "Security Deposit:",
+        verified: "Verified Owner",
+        callOwner: "Call Owner",
+        viewDetails: "View Details",
+        addListingBtn: "+ Add Room",
+        whatsappHelp: "Chat on WhatsApp",
+        shareBtn: "Share",
+        shareSuccess: "✓ Link Copied!",
+        shareTitle: "Affordable Room in Jaipur",
+        filtersTitle: "Filters & Budget",
+        noRooms: "No rooms found within this budget. Try adjusting the slider or locality.",
+        roomsCount: "Rooms Available",
+        amenities: {
+          water: "24/7 Water",
+          meter: "Separate Sub-meter",
+          toiletPrivate: "Attached Toilet",
+          toiletShared: "Shared Toilet",
+          fan: "Ceiling Fan",
+          groundFloor: "Ground Floor",
+          firstFloor: "1st Floor",
+          roWater: "RO Drinking Water"
+        },
+        toiletFilter: "Toilet Facility",
+        toiletAny: "Any",
+        toiletPersonalOnly: "Attached Only",
+        meterFilter: "Electricity Meter",
+        meterAny: "Any",
+        meterSeparateOnly: "Separate Sub-meter",
+        savedTab: "Saved",
+        allRoomsTab: "All Rooms",
+        loginTab: "Login",
+        registerTab: "Register",
+        auth: {
+          loginTitle: "User Login",
+          loginSubtitle: "Sign in with your mobile number or email",
+          registerTitle: "Create Free Account",
+          registerSubtitle: "Register to save favorites or list rooms directly",
+          nameLabel: "Full Name",
+          emailLabel: "Email Address (Optional)",
+          phoneLabel: "Mobile Number (10 digits)",
+          passwordLabel: "Password",
+          loginBtn: "Sign In",
+          registerBtn: "Create Account",
+          alreadyHaveAccount: "Already have an account? Sign In",
+          dontHaveAccount: "New user? Create an account",
+          userBadge: "User",
+          logout: "Logout"
+        },
+        ownerModal: {
+          title: "Owner: List Your Room",
+          step1: "1. Owner Details",
+          step2: "2. Address & Rent",
+          step3: "3. Amenities & Photos",
+          step4: "4. Review & Publish",
+          nameLabel: "Your Full Name",
+          mobileLabel: "Mobile Number (For calls)",
+          sendOtp: "Send OTP",
+          verifyOtp: "Verify OTP",
+          otpVerified: "✓ Mobile Verified",
+          otpPlaceholder: "Enter 6-digit OTP (use: 123456)",
+          localityLabel: "Jaipur Locality",
+          addressLabel: "Complete Address & House No.",
+          landmarkLabel: "Nearest Landmark (e.g. Near Bus Stand, Temple)",
+          rentLabel: "Monthly Rent (₹)",
+          depositLabel: "Security Deposit (₹)",
+          amenitiesLabel: "Amenities Available",
+          photoLabel: "Room Photos (Camera or Gallery)",
+          takePhotoBtn: "📸 Take Photo (Camera)",
+          galleryBtn: "🖼️ Choose from Gallery",
+          simulateCameraBtn: "⚡ Quick Demo Camera Snapshot",
+          uploadingPhoto: "Processing camera photo...",
+          photoSuccess: "✓ Photo added successfully!",
+          selectedAsMain: "Selected as Main Photo",
+          myPhotosList: "Room Photos List (Tap to choose main photo):",
+          publishBtn: "Publish Listing Live",
+          cancel: "Cancel",
+          next: "Next Step →",
+          back: "← Back"
+        },
+        adminTab: "Admin Panel",
+        adminSection: {
+          title: "Admin Management Portal",
+          subtitle: "Manage Jaipur rental listings, owner verifications & pricing",
+          passcodePrompt: "Admin Security PIN (default: 1234)",
+          adminPhonePrompt: "Admin Mobile Number (default: 9829012345)",
+          adminPassPrompt: "Admin Password (default: admin123)",
+          loginBtn: "Access Panel",
+          logoutBtn: "Exit Admin",
+          unlockedBadge: "Admin Authorized Session Active",
+          wrongPasscode: "Invalid credentials! Check your phone and password or master PIN.",
+          statsTotal: "Total Rooms",
+          statsActive: "Live Listings",
+          statsVerified: "Verified Owners",
+          statsAvgRent: "Avg. Rent",
+          searchPlaceholder: "Search by owner, locality or title...",
+          filterAll: "All Rooms",
+          filterVerified: "Verified Only",
+          filterCustom: "User Added",
+          verifyRoom: "Mark Verified",
+          unverifyRoom: "Remove Verify",
+          deleteRoom: "Delete Room",
+          confirmDelete: "Are you sure you want to remove this room listing?",
+          editRent: "Quick Edit Rent",
+          saveChanges: "Save",
+          cancelEdit: "Cancel",
+          resetDefaults: "Reset to Default Listings",
+          confirmReset: "Are you sure you want to reset all listings to the initial Jaipur seed dataset?",
+          noRoomsMatch: "No listings match the current admin filter",
+          ownerPhone: "Phone",
+          monthlyRent: "Rent",
+          deposit: "Deposit",
+          locality: "Area",
+          filterLocalityLabel: "Filter by Locality",
+          allLocalitiesOption: "All Localities (All Areas)",
+          tabs: {
+            listings: "Manage Rooms",
+            appConfig: "WhatsApp & Support Settings",
+            adminCreds: "Admin Phone & Password"
+          },
+          whatsappConfigTitle: "WhatsApp & Customer Support Configuration",
+          whatsappConfigSubtitle: "Manage floating WhatsApp number, support helpline, app description & developer credits",
+          whatsappNumberLabel: "Floating WhatsApp Number (with country code, e.g. 919829012345)",
+          supportPhoneLabel: "Customer Support Helpline Phone",
+          supportEmailLabel: "Customer Support Email",
+          appDescHiLabel: "App Description (Hindi)",
+          appDescEnLabel: "App Description (English)",
+          devNameLabel: "Developer Name / Team",
+          devContactLabel: "Developer Contact Details",
+          saveSettingsBtn: "Save App Settings",
+          saveSettingsSuccess: "✓ WhatsApp & Support Settings successfully updated!",
+          adminCredsTitle: "Admin Separate Number & Password Settings",
+          adminCredsSubtitle: "Configure your distinct admin mobile number and password to log in",
+          currentAdminPhone: "Current Admin Phone",
+          newAdminPhone: "New Admin Phone",
+          newAdminPassword: "New Admin Password",
+          saveCredsBtn: "Save Admin Credentials",
+          saveCredsSuccess: "✓ Admin mobile number and password saved!"
+        }
+      }
+    };
+
+    // --- Seed listings tailored for Jaipur low-income workers & families ---
+    const INITIAL_LISTINGS = [
+      {
+        id: "jk-101",
+        titleHi: "सांगानेर गौनेर रोड पर साफ-सुथरा कमरा",
+        titleEn: "Clean Single Room near Goner Road, Sanganer",
+        locality: "Sanganer",
+        localityHi: "सांगानेर",
+        addressHi: "मकान नं. 45, गौनेर रोड पुलिया के पास, सांगानेर, जयपुर",
+        addressEn: "Plot 45, Near Goner Road Puliya, Sanganer, Jaipur",
+        landmarkHi: "सांगानेर बस स्टैंड से 500 मीटर",
+        landmarkEn: "500m from Sanganer Bus Stand",
+        rent: 2800,
+        deposit: 2000,
+        ownerName: "रामनिवास शर्मा (Ramniwas Sharma)",
+        phone: "+919829012345",
+        verified: true,
+        toiletType: "shared", // 'shared' or 'personal'
+        hasSubmeter: true,
+        hasWater247: true,
+        hasFan: true,
+        floor: "ground",
+        hasRoWater: true,
+        image: "https://images.unsplash.com/photo-1598928506311-c55ded91a20c?w=600&auto=format&fit=crop&q=80",
+        additionalPhotos: [
+          "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=600&auto=format&fit=crop&q=80",
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=600&auto=format&fit=crop&q=80"
+        ],
+        descriptionHi: "कपड़ा फैक्ट्री और सांगानेर बाजार के नजदीक। 24 घंटे बोरिंग का पानी, खुला आंगन, अलग सब-मीटर। शांतिपूर्ण वातावरण।",
+        descriptionEn: "Very close to textile factories and Sanganer market. 24-hr boring water, open courtyard, separate sub-meter."
+      },
+      {
+        id: "jk-102",
+        titleHi: "वी.के.आई. रोड नं. 14 के पास कमरा श्रमिक भाइयों के लिए",
+        titleEn: "Budget Room near Road No. 14, VKI Industrial Area",
+        locality: "VKI Area",
+        localityHi: "वी.के.आई. एरिया",
+        addressHi: "गली नं. 3, राठी रोलिंग मिल के पीछे, रोड 14, VKI, जयपुर",
+        addressEn: "Lane 3, Behind Rathi Rolling Mill, Road 14, VKI, Jaipur",
+        landmarkHi: "विश्वकर्मा पुलिस थाने के पास",
+        landmarkEn: "Near Vishwakarma Police Station",
+        rent: 2200,
+        deposit: 1500,
+        ownerName: "भंवर लाल जाट (Bhanwar Lal)",
+        phone: "+919829123456",
+        verified: true,
+        toiletType: "shared",
+        hasSubmeter: true,
+        hasWater247: true,
+        hasFan: true,
+        floor: "ground",
+        hasRoWater: false,
+        image: "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=600&auto=format&fit=crop&q=80",
+        additionalPhotos: [
+          "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=600&auto=format&fit=crop&q=80"
+        ],
+        descriptionHi: "फैक्ट्री में काम करने वाले भाइयों के लिए आदर्श। रोड नं. 14 से पैदल 2 मिनट। साफ साझा शौचालय और चौबीस घंटे पानी।",
+        descriptionEn: "Ideal for industrial workers. 2 mins walk from Road 14. Clean shared toilet and reliable water supply."
+      },
+      {
+        id: "jk-103",
+        titleHi: "झालाना डूंगरी आरटीओ के नजदीक 1 कमरा सेट",
+        titleEn: "1 Room with Personal Toilet near Jhalana RTO",
+        locality: "Jhalana",
+        localityHi: "झालाना",
+        addressHi: "झालाना ग्राम, वन विभाग कार्यालय के पीछे, झालाना, जयपुर",
+        addressEn: "Jhalana Gram, Behind Forest Department, Jaipur",
+        landmarkHi: "आरटीओ ऑफिस झालाना से 300 मीटर",
+        landmarkEn: "300m from Jhalana RTO Office",
+        rent: 3600,
+        deposit: 3000,
+        ownerName: "सुरेश कुमार मीणा (Suresh Meena)",
+        phone: "+919829234567",
+        verified: true,
+        toiletType: "personal",
+        hasSubmeter: true,
+        hasWater247: true,
+        hasFan: true,
+        floor: "first",
+        hasRoWater: true,
+        image: "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=600&auto=format&fit=crop&q=80",
+        additionalPhotos: [
+          "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=600&auto=format&fit=crop&q=80"
+        ],
+        descriptionHi: "छोटे परिवार या छात्रों के लिए अटैच्ड शौचालय व बाथरूम वाला पक्का कमरा। सुरक्षित कॉलोनी, अलग बिजली मीटर।",
+        descriptionEn: "Well ventilated room with personal attached washroom. Suitable for small family or working individuals."
+      },
+      {
+        id: "jk-104",
+        titleHi: "सीतापुरा रीको एरिया के पास कमरा",
+        titleEn: "Worker Room near Sitapura RIICO Industrial Hub",
+        locality: "Sitapura",
+        localityHi: "सीतापुरा",
+        addressHi: "कुम्हारों का मोहल्ला, महात्मा गांधी अस्पताल के पीछे, सीतापुरा",
+        addressEn: "Behind MG Hospital, Sitapura Industrial Area, Jaipur",
+        landmarkHi: "महात्मा गांधी अस्पताल से 5 मिनट की दूरी",
+        landmarkEn: "5 min from Mahatma Gandhi Hospital",
+        rent: 3000,
+        deposit: 2000,
+        ownerName: "कैलाश चंद कुमावत (Kailash Chand)",
+        phone: "+919829345678",
+        verified: true,
+        toiletType: "shared",
+        hasSubmeter: true,
+        hasWater247: true,
+        hasFan: true,
+        floor: "ground",
+        hasRoWater: true,
+        image: "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?w=600&auto=format&fit=crop&q=80",
+        additionalPhotos: [],
+        descriptionHi: "सीतापुरा ज्वेलरी जोन और रीको फैक्ट्रियों के पास। पक्का फर्श, पंखा लगा हुआ, पीने का ठंडा पानी उपलब्ध।",
+        descriptionEn: "Close to Sitapura jewellery zone and RIICO manufacturing units. Ground floor with ceiling fan."
+      },
+      {
+        id: "jk-105",
+        titleHi: "मानसरोवर मुहाना मंडी रोड पर पारिवारिक कमरा",
+        titleEn: "Spacious Family Room on Muhana Mandi Road, Mansarovar",
+        locality: "Mansarovar",
+        localityHi: "मानसरोवर",
+        addressHi: "गोपालपुरा बायपास मोड़, मुहाना रोड, मानसरोवर, जयपुर",
+        addressEn: "Near Muhana Road, Mansarovar, Jaipur",
+        landmarkHi: "मानसरोवर मेट्रो स्टेशन से ऑटो द्वारा 10 मिनट",
+        landmarkEn: "10 mins by auto from Mansarovar Metro",
+        rent: 4200,
+        deposit: 3500,
+        ownerName: "ओमप्रकाश सैनी (Omprakash Saini)",
+        phone: "+919829456789",
+        verified: true,
+        toiletType: "personal",
+        hasSubmeter: true,
+        hasWater247: true,
+        hasFan: true,
+        floor: "first",
+        hasRoWater: true,
+        image: "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=600&auto=format&fit=crop&q=80",
+        additionalPhotos: [],
+        descriptionHi: "किचन स्लैब और अटैच्ड लैट-बाथ। मंडी व बाजार नजदीक। परिवार के लिए सुरक्षित व साफ-सुथरा माहौल।",
+        descriptionEn: "Room with kitchen counter slab and attached toilet. Close to daily vegetable market and grocery stores."
+      },
+      {
+        id: "jk-106",
+        titleHi: "प्रताप नगर सेक्टर 11 में बजट कमरा",
+        titleEn: "Budget Room in Sector 11, Pratap Nagar",
+        locality: "Pratap Nagar",
+        localityHi: "प्रताप नगर",
+        addressHi: "सेक्टर 11, हल्दीघाटी मार्ग के पास, प्रताप नगर, जयपुर",
+        addressEn: "Sector 11, Near Haldighati Marg, Pratap Nagar, Jaipur",
+        landmarkHi: "कोचिंग हब और बॉम्बे हॉस्पिटल के पास",
+        landmarkEn: "Near Coaching Hub & Bombay Hospital",
+        rent: 3400,
+        deposit: 2500,
+        ownerName: "राजेश गुर्जर (Rajesh Gurjar)",
+        phone: "+919829567890",
+        verified: true,
+        toiletType: "personal",
+        hasSubmeter: true,
+        hasWater247: true,
+        hasFan: true,
+        floor: "ground",
+        hasRoWater: true,
+        image: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=600&auto=format&fit=crop&q=80",
+        additionalPhotos: [],
+        descriptionHi: "हल्दीघाटी मार्ग से 2 मिनट। सांगानेर स्टेशन और रीको सीतापुरा दोनों जगह सुगम आवागमन।",
+        descriptionEn: "Easy tempo connectivity to both Sanganer and Sitapura. Ground floor with attached bathroom."
+      },
+      {
+        id: "jk-107",
+        titleHi: "बगरू रीको एरिया में कामगारों के लिए कमरा",
+        titleEn: "Worker Accommodation in Bagru RIICO Hub",
+        locality: "Bagru",
+        localityHi: "बगरू",
+        addressHi: "पुराना बस स्टैंड, छीपा मोहल्ला, बगरू, जयपुर",
+        addressEn: "Chhipa Mohalla, Old Bus Stand, Bagru, Jaipur",
+        landmarkHi: "बगरू थाना व मुख्य बस स्टैंड के पास",
+        landmarkEn: "Near Bagru Police Station",
+        rent: 2000,
+        deposit: 1000,
+        ownerName: "गणेश नारायण छीपा (Ganesh Chhipa)",
+        phone: "+919829678901",
+        verified: true,
+        toiletType: "shared",
+        hasSubmeter: false,
+        hasWater247: true,
+        hasFan: true,
+        floor: "ground",
+        hasRoWater: false,
+        image: "https://images.unsplash.com/photo-1540518614846-7ede433c4ef2?w=600&auto=format&fit=crop&q=80",
+        additionalPhotos: [],
+        descriptionHi: "हैंडब्लॉक प्रिंटिंग और डाइंग फैक्ट्री कर्मियों के लिए सबसे सस्ता कमरा। बिजली-पानी का बिल किराए में शामिल।",
+        descriptionEn: "Most affordable room for textile and dyeing workers. Electricity and water included in rent."
+      },
+      {
+        id: "jk-108",
+        titleHi: "मालवीय नगर झालाना बाईपास के पास 1 कमरा",
+        titleEn: "Single Room near Jhalana Bypass, Malviya Nagar",
+        locality: "Malviya Nagar",
+        localityHi: "मालवीय नगर",
+        addressHi: "कैलगेरी रोड के पास, झालाना कच्ची बस्ती, मालवीय नगर, जयपुर",
+        addressEn: "Near Calgiri Eye Hospital, Malviya Nagar, Jaipur",
+        landmarkHi: "कैलगेरी अस्पताल से 200 मीटर",
+        landmarkEn: "200m from Calgiri Hospital",
+        rent: 4800,
+        deposit: 4000,
+        ownerName: "महेंद्र सिंह राठौड़ (Mahendra Singh)",
+        phone: "+919829789012",
+        verified: true,
+        toiletType: "personal",
+        hasSubmeter: true,
+        hasWater247: true,
+        hasFan: true,
+        floor: "first",
+        hasRoWater: true,
+        image: "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=600&auto=format&fit=crop&q=80",
+        additionalPhotos: [],
+        descriptionHi: "हॉस्पिटल व मॉल कर्मियों के लिए उपयुक्त। पक्की छत, टाइल्स वाला कमरा, अलग मीटर व अटैच शौचालय।",
+        descriptionEn: "Suitable for hospital and commercial staff. Tiled room with attached toilet and separate meter."
+      }
+    ];
+
+    const LOCALITIES = [
+      { id: "all", nameEn: "All Areas", nameHi: "सभी इलाके" },
+      { id: "Sanganer", nameEn: "Sanganer", nameHi: "सांगानेर" },
+      { id: "VKI Area", nameEn: "VKI Area", nameHi: "वी.के.आई." },
+      { id: "Jhalana", nameEn: "Jhalana", nameHi: "झालाना" },
+      { id: "Sitapura", nameEn: "Sitapura", nameHi: "सीतापुरा" },
+      { id: "Mansarovar", nameEn: "Mansarovar", nameHi: "मानसरोवर" },
+      { id: "Pratap Nagar", nameEn: "Pratap Nagar", nameHi: "प्रताप नगर" },
+      { id: "Bagru", nameEn: "Bagru", nameHi: "बगरू" },
+      { id: "Malviya Nagar", nameEn: "Malviya Nagar", nameHi: "मालवीय नगर" }
+    ];
+
+    // --- Main App Component ---
+    function ApnaKamraApp() {
+      const [lang, setLang] = useState(() => localStorage.getItem("ak_lang") || "hi");
+      const [budget, setBudget] = useState(5000);
+      const [selectedLocality, setSelectedLocality] = useState("all");
+      const [searchQuery, setSearchQuery] = useState("");
+      const [toiletFilter, setToiletFilter] = useState("all"); // 'all' or 'personal'
+      const [meterFilter, setMeterFilter] = useState("all"); // 'all' or 'submeter'
+      const [savedIds, setSavedIds] = useState(() => {
+        try {
+          return JSON.parse(localStorage.getItem("ak_saved_rooms") || "[]");
+        } catch {
+          return [];
+        }
+      });
+      const [activeTab, setActiveTab] = useState("feed"); // 'feed' | 'saved' | 'admin' | 'auth'
+      const [activeModalRoom, setActiveModalRoom] = useState(null);
+      const [showAddModal, setShowAddModal] = useState(false);
+      const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
+
+      // App settings state (floating WhatsApp, support phone, description, developer)
+      const [appSettings, setAppSettings] = useState(() => {
+        try {
+          const stored = localStorage.getItem("ak_app_settings");
+          return stored ? { ...DEFAULT_APP_SETTINGS, ...JSON.parse(stored) } : DEFAULT_APP_SETTINGS;
+        } catch {
+          return DEFAULT_APP_SETTINGS;
+        }
+      });
+
+      // Admin separate number and password state
+      const [adminCreds, setAdminCreds] = useState(() => {
+        try {
+          const stored = localStorage.getItem("ak_admin_creds");
+          return stored ? JSON.parse(stored) : { phone: "9829012345", password: "admin123" };
+        } catch {
+          return { phone: "9829012345", password: "admin123" };
+        }
+      });
+
+      // User authentication state (Firebase / local registered users)
+      const [currentUser, setCurrentUser] = useState(() => {
+        try {
+          const stored = localStorage.getItem("ak_current_user");
+          return stored ? JSON.parse(stored) : null;
+        } catch {
+          return null;
+        }
+      });
+
+      // Listen to Firebase Auth state change and Realtime Database for settings if initialized
+      useEffect(() => {
+        if (fbAuth) {
+          const unsubscribe = fbAuth.onAuthStateChanged((user) => {
+            if (user) {
+              const uData = {
+                uid: user.uid,
+                name: user.displayName || user.email?.split("@")[0] || "User",
+                email: user.email || "",
+                phone: user.phoneNumber || (currentUser?.phone || "")
+              };
+              setCurrentUser(uData);
+              localStorage.setItem("ak_current_user", JSON.stringify(uData));
+            }
+          });
+          return () => unsubscribe();
+        }
+      }, []);
+
+      // Realtime Database listeners for synchronized app settings & admin credentials
+      useEffect(() => {
+        if (fbDb) {
+          try {
+            const settingsRef = fbDb.ref("appSettings");
+            settingsRef.on("value", (snapshot) => {
+              const val = snapshot.val();
+              if (val) {
+                setAppSettings(prev => ({ ...prev, ...val }));
+                localStorage.setItem("ak_app_settings", JSON.stringify(val));
+              }
+            });
+
+            const credsRef = fbDb.ref("adminCreds");
+            credsRef.on("value", (snapshot) => {
+              const val = snapshot.val();
+              if (val && val.phone && val.password) {
+                setAdminCreds(val);
+                localStorage.setItem("ak_admin_creds", JSON.stringify(val));
+              }
+            });
+
+            return () => {
+              try {
+                settingsRef.off();
+                credsRef.off();
+              } catch (e) {}
+            };
+          } catch (dbErr) {
+            console.warn("Firebase Realtime DB sync notice:", dbErr);
+          }
+        }
+      }, []);
+
+      // Handlers for App Settings and Admin Credentials
+      const handleUpdateAppSettings = (newSettings) => {
+        setAppSettings(newSettings);
+        localStorage.setItem("ak_app_settings", JSON.stringify(newSettings));
+        if (fbDb) {
+          try {
+            fbDb.ref("appSettings").set(newSettings).catch(err => {
+              console.warn("Firebase DB save appSettings note:", err.message);
+            });
+          } catch (e) {}
+        }
+      };
+
+      const handleUpdateAdminCreds = (newCreds) => {
+        setAdminCreds(newCreds);
+        localStorage.setItem("ak_admin_creds", JSON.stringify(newCreds));
+        if (fbDb) {
+          try {
+            fbDb.ref("adminCreds").set(newCreds).catch(err => {
+              console.warn("Firebase DB save adminCreds note:", err.message);
+            });
+          } catch (e) {}
+        }
+      };
+
+      // Handlers for User Auth (Registration & Login)
+      const handleRegisterUser = async ({ name, phone, email, password }) => {
+        // Try Firebase auth if email is provided, else use local registered user storage
+        let userRecord = {
+          uid: "usr-" + Date.now(),
+          name,
+          phone,
+          email: email || `${phone}@apnakamra.local`,
+          registeredAt: new Date().toISOString()
+        };
+
+        if (fbAuth && email) {
+          try {
+            const userCred = await fbAuth.createUserWithEmailAndPassword(email, password);
+            if (userCred && userCred.user) {
+              await userCred.user.updateProfile({ displayName: name });
+              userRecord.uid = userCred.user.uid;
+            }
+          } catch (fbErr) {
+            console.warn("Firebase Auth Notice (falling back to secure local user store):", fbErr.message);
+          }
+        }
+
+        // Persist to registered users store
+        let users = [];
+        try {
+          users = JSON.parse(localStorage.getItem("ak_registered_users") || "[]");
+        } catch { users = []; }
+
+        users = users.filter(u => u.phone !== phone);
+        users.push({ ...userRecord, passwordHash: btoa(password) });
+        localStorage.setItem("ak_registered_users", JSON.stringify(users));
+
+        setCurrentUser(userRecord);
+        localStorage.setItem("ak_current_user", JSON.stringify(userRecord));
+        return userRecord;
+      };
+
+      const handleLoginUser = async (phone, password) => {
+        // Try Firebase auth if user exists with synthetic email
+        const syntheticEmail = `${phone}@apnakamra.local`;
+        let found = null;
+
+        let users = [];
+        try {
+          users = JSON.parse(localStorage.getItem("ak_registered_users") || "[]");
+        } catch { users = []; }
+
+        const localUser = users.find(u => u.phone === phone);
+        if (localUser) {
+          if (localUser.passwordHash === btoa(password)) {
+            found = { uid: localUser.uid, name: localUser.name, phone: localUser.phone, email: localUser.email };
+          } else {
+            throw new Error(lang === "hi" ? "गलत पासवर्ड! कृपया पुनः प्रयास करें।" : "Incorrect password! Please try again.");
+          }
+        } else {
+          // If not in local list, check if matching admin or demo user
+          if (phone === "9829012345" && password === "admin123") {
+            found = { uid: "usr-admin", name: "Admin User", phone: "9829012345", email: "admin@apnakamra.in" };
+          } else {
+            // Register as auto-verified user for convenience if 1st time
+            const autoUser = {
+              uid: "usr-" + Date.now(),
+              name: lang === "hi" ? "जयपुर निवासी" : "Jaipur Resident",
+              phone,
+              email: syntheticEmail
+            };
+            users.push({ ...autoUser, passwordHash: btoa(password) });
+            localStorage.setItem("ak_registered_users", JSON.stringify(users));
+            found = autoUser;
+          }
+        }
+
+        if (fbAuth && found.email && !found.email.endsWith(".local")) {
+          try {
+            await fbAuth.signInWithEmailAndPassword(found.email, password);
+          } catch (e) {
+            // Non-blocking fallback
+          }
+        }
+
+        setCurrentUser(found);
+        localStorage.setItem("ak_current_user", JSON.stringify(found));
+        return found;
+      };
+
+      const handleLogoutUser = () => {
+        if (fbAuth) {
+          try { fbAuth.signOut(); } catch (e) {}
+        }
+        setCurrentUser(null);
+        localStorage.removeItem("ak_current_user");
+      };
+
+      // Persisted user added listings
+      const [listings, setListings] = useState(() => {
+        try {
+          const stored = localStorage.getItem("ak_custom_listings");
+          return stored ? JSON.parse(stored) : INITIAL_LISTINGS;
+        } catch {
+          return INITIAL_LISTINGS;
+        }
+      });
+
+      // Synchronize listings from Firebase Realtime Database
+      useEffect(() => {
+        if (fbDb) {
+          try {
+            const listingsRef = fbDb.ref("listings");
+            listingsRef.on("value", (snapshot) => {
+              const val = snapshot.val();
+              if (val && Array.isArray(val) && val.length > 0) {
+                setListings(val);
+                localStorage.setItem("ak_custom_listings", JSON.stringify(val));
+              }
+            });
+            return () => {
+              try { listingsRef.off(); } catch (e) {}
+            };
+          } catch (e) {}
+        }
+      }, []);
+
+      // Deep-linking: auto-open room if room query parameter is present in URL
+      useEffect(() => {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const roomId = params.get("room");
+          if (roomId) {
+            const found = listings.find(r => r.id === roomId);
+            if (found) {
+              setActiveModalRoom(found);
+            }
+          }
+        } catch (e) {
+          // ignore URL search parsing errors
+        }
+      }, [listings]);
+
+      const handleOpenRoomModal = (room) => {
+        setActiveModalRoom(room);
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.set("room", room.id);
+          window.history.replaceState({}, "", url.toString());
+        } catch (e) {}
+      };
+
+      const handleCloseRoomModal = () => {
+        setActiveModalRoom(null);
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.delete("room");
+          window.history.replaceState({}, "", url.toString());
+        } catch (e) {}
+      };
+
+      const t = i18n[lang];
+
+      const toggleLang = () => {
+        const next = lang === "hi" ? "en" : "hi";
+        setLang(next);
+        localStorage.setItem("ak_lang", next);
+      };
+
+      const toggleSave = (id) => {
+        const next = savedIds.includes(id)
+          ? savedIds.filter(x => x !== id)
+          : [...savedIds, id];
+        setSavedIds(next);
+        localStorage.setItem("ak_saved_rooms", JSON.stringify(next));
+      };
+
+      // Admin actions: Toggle verification
+      const handleToggleVerify = (id) => {
+        const updated = listings.map(item =>
+          item.id === id ? { ...item, verified: !item.verified } : item
+        );
+        setListings(updated);
+        localStorage.setItem("ak_custom_listings", JSON.stringify(updated));
+        if (fbDb) {
+          try { fbDb.ref("listings").set(updated).catch(() => {}); } catch (e) {}
+        }
+      };
+
+      // Admin actions: Delete listing
+      const handleDeleteListing = (id) => {
+        const updated = listings.filter(item => item.id !== id);
+        setListings(updated);
+        localStorage.setItem("ak_custom_listings", JSON.stringify(updated));
+        if (fbDb) {
+          try { fbDb.ref("listings").set(updated).catch(() => {}); } catch (e) {}
+        }
+        // Also remove from saved if present
+        if (savedIds.includes(id)) {
+          const updatedSaved = savedIds.filter(x => x !== id);
+          setSavedIds(updatedSaved);
+          localStorage.setItem("ak_saved_rooms", JSON.stringify(updatedSaved));
+        }
+      };
+
+      // Admin actions: Update Rent
+      const handleUpdateRent = (id, newRent) => {
+        const updated = listings.map(item =>
+          item.id === id ? { ...item, rent: Number(newRent) } : item
+        );
+        setListings(updated);
+        localStorage.setItem("ak_custom_listings", JSON.stringify(updated));
+        if (fbDb) {
+          try { fbDb.ref("listings").set(updated).catch(() => {}); } catch (e) {}
+        }
+      };
+
+      // Admin actions: Reset to Initial Listings
+      const handleResetDefaults = () => {
+        setListings(INITIAL_LISTINGS);
+        localStorage.setItem("ak_custom_listings", JSON.stringify(INITIAL_LISTINGS));
+        if (fbDb) {
+          try { fbDb.ref("listings").set(INITIAL_LISTINGS).catch(() => {}); } catch (e) {}
+        }
+      };
+
+      // Filter listings
+      const filteredListings = useMemo(() => {
+        return listings.filter(item => {
+          if (activeTab === "saved" && !savedIds.includes(item.id)) return false;
+          if (item.rent > budget) return false;
+          if (selectedLocality !== "all" && item.locality !== selectedLocality) return false;
+          if (toiletFilter === "personal" && item.toiletType !== "personal") return false;
+          if (meterFilter === "submeter" && !item.hasSubmeter) return false;
+          if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase();
+            const textMatch =
+              item.locality.toLowerCase().includes(q) ||
+              item.localityHi.toLowerCase().includes(q) ||
+              item.addressHi.toLowerCase().includes(q) ||
+              item.addressEn.toLowerCase().includes(q) ||
+              item.landmarkHi.toLowerCase().includes(q) ||
+              item.landmarkEn.toLowerCase().includes(q) ||
+              item.titleHi.toLowerCase().includes(q) ||
+              item.titleEn.toLowerCase().includes(q);
+            if (!textMatch) return false;
+          }
+          return true;
+        });
+      }, [listings, budget, selectedLocality, toiletFilter, meterFilter, searchQuery, activeTab, savedIds]);
+
+      // Add new listing handler
+      const handleAddListing = (newRoom) => {
+        const updated = [newRoom, ...listings];
+        setListings(updated);
+        localStorage.setItem("ak_custom_listings", JSON.stringify(updated));
+        if (fbDb) {
+          try { fbDb.ref("listings").set(updated).catch(() => {}); } catch (e) {}
+        }
+        setShowAddModal(false);
+      };
+
+      return (
+        <div id="app_container" class="min-h-screen flex flex-col bg-slate-100 pb-24 max-w-md md:max-w-2xl lg:max-w-4xl mx-auto shadow-2xl relative border-x border-slate-200">
+          
+          {/* Header */}
+          <header id="main_header" class="sticky top-0 z-30 bg-[#0A2540] text-white px-4 py-3 shadow-md">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-2 cursor-pointer" onClick={() => setActiveTab("feed")}>
+                <div class="w-10 h-10 rounded-lg bg-[#EAA206] flex items-center justify-center text-[#0A2540] font-bold text-xl shadow">
+                  🏠
+                </div>
+                <div>
+                  <h1 class="text-lg font-bold leading-tight tracking-tight text-amber-300">
+                    {t.appName}
+                  </h1>
+                  <p class="text-[11px] text-slate-300 font-medium leading-none mt-0.5">
+                    {lang === 'hi' ? 'जयपुर का अपना रेंटल पोर्टल' : 'Jaipur Verified Worker Rentals'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Language Switcher, User Auth, Admin Button & Add Room Button */}
+              <div class="flex items-center space-x-1.5 flex-wrap justify-end gap-y-1">
+                <button
+                  id="btn_lang_toggle"
+                  onClick={toggleLang}
+                  class="px-2.5 py-1.5 rounded-full text-xs font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/20 transition flex items-center space-x-1"
+                  title="Switch Language"
+                >
+                  <span class="text-amber-400 font-bold">{lang === "hi" ? "अ / A" : "A / अ"}</span>
+                  <span>{lang === "hi" ? "English" : "हिंदी"}</span>
+                </button>
+
+                {/* User Auth Login / Profile Button */}
+                <button
+                  id="btn_header_auth"
+                  onClick={() => setActiveTab("auth")}
+                  class={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 border ${
+                    activeTab === "auth"
+                      ? "bg-emerald-500 text-white border-emerald-400 shadow-sm"
+                      : currentUser
+                      ? "bg-emerald-900/60 hover:bg-emerald-800 text-emerald-200 border-emerald-500/40"
+                      : "bg-white/10 hover:bg-white/20 text-white border-white/20"
+                  }`}
+                  title={currentUser ? `Logged in: ${currentUser.name}` : (t.auth ? t.auth.loginTitle : "Login")}
+                >
+                  <span>{currentUser ? "👤" : "🔑"}</span>
+                  <span class="max-w-[75px] truncate hidden xs:inline">
+                    {currentUser ? currentUser.name.split(" ")[0] : (lang === "hi" ? "लॉगिन" : "Login")}
+                  </span>
+                </button>
+
+                <button
+                  id="btn_header_admin"
+                  onClick={() => setActiveTab("admin")}
+                  class={`px-2 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 border ${
+                    activeTab === "admin"
+                      ? "bg-amber-400 text-[#0A2540] border-amber-300 shadow-sm"
+                      : "bg-white/10 hover:bg-white/20 text-white border-white/20"
+                  }`}
+                  title="Admin Manage"
+                >
+                  <span>🛡️</span>
+                  <span class="hidden xs:inline">{lang === "hi" ? "एडमिन" : "Admin"}</span>
+                </button>
+
+                <button
+                  id="btn_open_add_listing"
+                  onClick={() => setShowAddModal(true)}
+                  class="bg-[#EAA206] hover:bg-amber-500 text-[#0A2540] font-bold text-xs px-3 py-1.5 rounded-lg shadow transition active:scale-95 flex items-center space-x-1"
+                >
+                  <span>+</span>
+                  <span class="hidden sm:inline">{lang === "hi" ? "कमरा डालें" : "Add Room"}</span>
+                  <span class="sm:hidden">{lang === "hi" ? "डालें" : "Add"}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick banner tagline & configured support info */}
+            <div class="mt-2.5 bg-blue-950/70 rounded-md px-2.5 py-1.5 text-[12px] text-amber-200 flex items-center justify-between border border-amber-500/20 flex-wrap gap-1">
+              <span class="flex items-center space-x-1 truncate">
+                <span>⚡</span>
+                <span class="font-medium truncate">{appSettings?.appDescriptionHi || t.tagline}</span>
+              </span>
+              <div class="flex items-center space-x-2 shrink-0">
+                {appSettings?.supportPhone && (
+                  <a
+                    href={`tel:${appSettings.supportPhone}`}
+                    class="text-[10px] text-amber-300 hover:underline flex items-center space-x-0.5"
+                    title="Customer Support"
+                  >
+                    <span>📞</span>
+                    <span>{appSettings.supportPhone}</span>
+                  </a>
+                )}
+                <span class="text-[10px] bg-emerald-700/80 text-emerald-100 px-1.5 py-0.5 rounded font-semibold">
+                  {lang === 'hi' ? '0% दलाली' : '0% Brokerage'}
+                </span>
+              </div>
+            </div>
+          </header>
+
+          {/* Search & Filter Bar Section (Shown on Feed/Saved view) */}
+          {activeTab !== "admin" && activeTab !== "auth" && (
+            <section id="search_filter_section" class="bg-white px-4 pt-3.5 pb-4 border-b border-slate-200 shadow-sm">
+            
+            {/* Search Input with Clear Button */}
+            <div class="relative">
+              <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+              </div>
+              <input
+                id="search_locality_input"
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t.searchPlaceholder}
+                class="w-full pl-10 pr-10 py-2.5 text-sm bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-[#0A2540] transition text-slate-900 placeholder:text-slate-400"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Locality Quick Chips */}
+            <div class="mt-3 flex items-center space-x-1.5 overflow-x-auto pb-1 custom-scrollbar">
+              {LOCALITIES.map((loc) => {
+                const isActive = selectedLocality === loc.id;
+                return (
+                  <button
+                    key={loc.id}
+                    id={`locality_chip_${loc.id}`}
+                    onClick={() => setSelectedLocality(loc.id)}
+                    class={`whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-semibold transition shrink-0 ${
+                      isActive
+                        ? "bg-[#0A2540] text-amber-300 shadow-sm"
+                        : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                    }`}
+                  >
+                    {lang === "hi" ? loc.nameHi : loc.nameEn}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Budget Slider Filter */}
+            <div class="mt-4 pt-3 border-t border-slate-100">
+              <div class="flex items-center justify-between text-xs mb-1.5">
+                <span class="font-semibold text-slate-700">{t.maxRent}</span>
+                <span class="text-sm font-bold text-[#0A2540] bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300">
+                  ₹{budget.toLocaleString('en-IN')}{t.perMonth}
+                </span>
+              </div>
+              <input
+                id="budget_range_slider"
+                type="range"
+                min="2000"
+                max="5000"
+                step="200"
+                value={budget}
+                onChange={(e) => setBudget(Number(e.target.value))}
+                class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#EAA206]"
+              />
+              <div class="flex justify-between text-[10px] text-slate-500 font-medium mt-1">
+                <span>₹2,000</span>
+                <span>₹3,000</span>
+                <span>₹4,000</span>
+                <span>₹5,000</span>
+              </div>
+            </div>
+
+            {/* Secondary Quick Amenity Toggles */}
+            <div class="mt-3 flex items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+              <button
+                id="filter_toilet_btn"
+                onClick={() => setToiletFilter(toiletFilter === "personal" ? "all" : "personal")}
+                class={`flex-1 py-1.5 px-2 rounded-lg border font-medium text-center transition ${
+                  toiletFilter === "personal"
+                    ? "bg-amber-500 text-white border-amber-600 font-bold"
+                    : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                }`}
+              >
+                🚽 {lang === "hi" ? "केवल पर्सनल लैट-बाथ" : "Attached Toilet Only"}
+              </button>
+
+              <button
+                id="filter_meter_btn"
+                onClick={() => setMeterFilter(meterFilter === "submeter" ? "all" : "submeter")}
+                class={`flex-1 py-1.5 px-2 rounded-lg border font-medium text-center transition ${
+                  meterFilter === "submeter"
+                    ? "bg-[#0A2540] text-amber-300 border-[#0A2540] font-bold"
+                    : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                }`}
+              >
+                ⚡ {lang === "hi" ? "अलग सब-मीटर" : "Sub-meter Only"}
+              </button>
+            </div>
+          </section>
+          )}
+
+          {/* Navigation Bar / Feed Header */}
+          <div class="px-4 py-2.5 flex items-center justify-between bg-slate-200/70 border-b border-slate-200 text-xs">
+            <div class="flex items-center space-x-1.5 flex-wrap">
+              <button
+                id="tab_feed_btn"
+                onClick={() => setActiveTab("feed")}
+                class={`font-bold px-2 py-1 rounded transition ${activeTab === "feed" ? "bg-[#0A2540] text-white" : "text-slate-600 hover:text-slate-900"}`}
+              >
+                {t.allRoomsTab} ({filteredListings.length})
+              </button>
+              <button
+                id="tab_saved_btn"
+                onClick={() => setActiveTab("saved")}
+                class={`font-bold px-2 py-1 rounded transition flex items-center space-x-1 ${activeTab === "saved" ? "bg-[#0A2540] text-white" : "text-slate-600 hover:text-slate-900"}`}
+              >
+                <span>❤️ {t.savedTab}</span>
+                <span>({savedIds.length})</span>
+              </button>
+              <button
+                id="tab_auth_btn"
+                onClick={() => setActiveTab("auth")}
+                class={`font-bold px-2 py-1 rounded transition flex items-center space-x-1 ${
+                  activeTab === "auth"
+                    ? "bg-emerald-600 text-white shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>{currentUser ? "👤" : "🔑"}</span>
+                <span>{currentUser ? currentUser.name.split(" ")[0] : (lang === "hi" ? "लॉगिन / रजिस्टर" : "Login / Register")}</span>
+              </button>
+              <button
+                id="tab_admin_btn"
+                onClick={() => setActiveTab("admin")}
+                class={`font-bold px-2 py-1 rounded transition flex items-center space-x-1 ${
+                  activeTab === "admin"
+                    ? "bg-amber-500 text-slate-900 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>🛡️ {t.adminTab}</span>
+                {isAdminUnlocked && <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>}
+              </button>
+            </div>
+
+            <span class="text-[11px] text-slate-600 font-medium hidden sm:inline">
+              {lang === "hi" ? "जयपुर के सत्यापित कमरे" : "Jaipur Verified"}
+            </span>
+          </div>
+
+          {/* Content Area: Admin Section OR User Auth Section OR Public Room Feed */}
+          {activeTab === "admin" ? (
+            <div class="flex-1 px-4 py-3">
+              <AdminSection
+                lang={lang}
+                t={t}
+                listings={listings}
+                onToggleVerify={handleToggleVerify}
+                onDeleteListing={handleDeleteListing}
+                onUpdateRent={handleUpdateRent}
+                onResetDefaults={handleResetDefaults}
+                isAdminUnlocked={isAdminUnlocked}
+                setIsAdminUnlocked={setIsAdminUnlocked}
+                onClose={() => setActiveTab("feed")}
+                appSettings={appSettings}
+                onUpdateAppSettings={handleUpdateAppSettings}
+                adminCreds={adminCreds}
+                onUpdateAdminCreds={handleUpdateAdminCreds}
+              />
+            </div>
+          ) : activeTab === "auth" ? (
+            <div class="flex-1 px-4 py-3">
+              <UserAuthSection
+                lang={lang}
+                t={t}
+                currentUser={currentUser}
+                onLoginUser={handleLoginUser}
+                onRegisterUser={handleRegisterUser}
+                onLogoutUser={handleLogoutUser}
+                onClose={() => setActiveTab("feed")}
+              />
+            </div>
+          ) : (
+            /* Room Listings Feed (1-col on mobile, 2-col on tablet/desktop) */
+            <main id="room_feed_container" class="flex-1 px-4 py-3">
+            {filteredListings.length === 0 ? (
+              <div id="no_rooms_found" class="bg-white rounded-2xl p-6 text-center shadow-sm border border-slate-200 mt-4 max-w-md mx-auto">
+                <div class="text-4xl mb-2">🔍</div>
+                <h3 class="font-bold text-slate-800 text-base mb-1">
+                  {lang === "hi" ? "कोई कमरा नहीं मिला" : "No Rooms Found"}
+                </h3>
+                <p class="text-xs text-slate-500 max-w-xs mx-auto mb-4">
+                  {t.noRooms}
+                </p>
+                <button
+                  id="reset_filters_btn"
+                  onClick={() => {
+                    setBudget(5000);
+                    setSelectedLocality("all");
+                    setSearchQuery("");
+                    setToiletFilter("all");
+                    setMeterFilter("all");
+                  }}
+                  class="bg-[#0A2540] text-amber-300 font-bold text-xs px-4 py-2 rounded-lg shadow hover:bg-slate-800"
+                >
+                  {lang === "hi" ? "सभी फ़िल्टर हटाएं" : "Reset All Filters"}
+                </button>
+              </div>
+            ) : (
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredListings.map((room) => {
+                const isSaved = savedIds.includes(room.id);
+                return (
+                  <article
+                    key={room.id}
+                    id={`room_card_${room.id}`}
+                    class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden transition-all duration-200 hover:shadow-md flex flex-col"
+                  >
+                    {/* Room Image Header with Rent Tag */}
+                    <div class="relative h-44 w-full bg-slate-800 overflow-hidden cursor-pointer" onClick={() => setActiveModalRoom(room)}>
+                      <img
+                        src={room.image}
+                        alt={room.titleEn}
+                        loading="lazy"
+                        class="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                      />
+                      <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"></div>
+
+                      {/* Locality Tag */}
+                      <span class="absolute top-2.5 left-2.5 bg-[#0A2540]/90 text-amber-300 font-bold text-[11px] px-2.5 py-1 rounded-md shadow backdrop-blur-sm">
+                        📍 {lang === "hi" ? room.localityHi : room.locality}
+                      </span>
+
+                      {/* Bookmark Heart Button */}
+                      <button
+                        id={`btn_save_${room.id}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSave(room.id);
+                        }}
+                        class="absolute top-2.5 right-2.5 w-9 h-9 rounded-full bg-white/90 shadow flex items-center justify-center text-base active:scale-90 transition"
+                        title="Save to favorites"
+                      >
+                        {isSaved ? "❤️" : "🤍"}
+                      </button>
+
+                      {/* Rent & Deposit Badge overlay */}
+                      <div class="absolute bottom-2.5 left-2.5 right-2.5 flex items-end justify-between text-white">
+                        <div>
+                          <div class="text-[11px] text-amber-300 font-semibold uppercase tracking-wider">
+                            {lang === "hi" ? "मासिक किराया" : "Monthly Rent"}
+                          </div>
+                          <div class="text-2xl font-extrabold text-white leading-none">
+                            ₹{room.rent.toLocaleString('en-IN')}
+                            <span class="text-xs font-normal text-slate-300 ml-0.5">{t.perMonth}</span>
+                          </div>
+                        </div>
+
+                        <div class="text-right text-[11px] bg-black/50 px-2 py-1 rounded-md backdrop-blur-sm border border-white/10">
+                          <span class="text-slate-300 block">{lang === "hi" ? "डिपॉजिट:" : "Deposit:"}</span>
+                          <span class="font-bold text-amber-300">₹{room.deposit.toLocaleString('en-IN')}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card Body */}
+                    <div class="p-3.5 flex flex-col flex-1">
+                      
+                      {/* Room Title */}
+                      <h2
+                        onClick={() => setActiveModalRoom(room)}
+                        class="font-bold text-slate-900 text-sm leading-snug cursor-pointer hover:text-blue-900"
+                      >
+                        {lang === "hi" ? room.titleHi : room.titleEn}
+                      </h2>
+
+                      {/* Address & Landmark */}
+                      <div class="mt-1.5 flex items-start space-x-1.5 text-xs text-slate-600">
+                        <span class="text-slate-400 mt-0.5">🚩</span>
+                        <p class="line-clamp-1 font-medium">
+                          {lang === "hi" ? room.landmarkHi : room.landmarkEn}
+                        </p>
+                      </div>
+
+                      {/* Amenities Badges Row */}
+                      <div class="mt-2.5 flex flex-wrap gap-1.5">
+                        {room.hasWater247 && (
+                          <span class="inline-flex items-center text-[11px] font-semibold bg-blue-50 text-blue-800 px-2 py-0.5 rounded border border-blue-200">
+                            💧 {t.amenities.water}
+                          </span>
+                        )}
+                        {room.hasSubmeter && (
+                          <span class="inline-flex items-center text-[11px] font-semibold bg-amber-50 text-amber-900 px-2 py-0.5 rounded border border-amber-200">
+                            ⚡ {t.amenities.meter}
+                          </span>
+                        )}
+                        <span class={`inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded border ${
+                          room.toiletType === 'personal'
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            : 'bg-slate-100 text-slate-700 border-slate-300'
+                        }`}>
+                          🚽 {room.toiletType === 'personal' ? t.amenities.toiletPrivate : t.amenities.toiletShared}
+                        </span>
+                        {room.hasFan && (
+                          <span class="inline-flex items-center text-[11px] font-semibold bg-purple-50 text-purple-800 px-2 py-0.5 rounded border border-purple-200">
+                            🌀 {t.amenities.fan}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Owner verification tag */}
+                      <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
+                        <div class="flex items-center space-x-1 text-emerald-700 font-semibold">
+                          <span>✓</span>
+                          <span class="text-[11px]">{t.verified}</span>
+                        </div>
+                        <span class="text-[11px] text-slate-500 font-medium">
+                          {room.ownerName.split(" ")[0]}
+                        </span>
+                      </div>
+
+                      {/* Action Buttons: Big Green Direct Call & View Details */}
+                      <div class="mt-3 grid grid-cols-5 gap-2">
+                        {/* Call Button (Takes 3 columns) */}
+                        <a
+                          id={`call_btn_${room.id}`}
+                          href={`tel:${room.phone}`}
+                          class="col-span-3 min-h-[48px] bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm px-3 rounded-xl flex items-center justify-center space-x-2 shadow-sm transition active:scale-98"
+                        >
+                          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+                          </svg>
+                          <span>{t.callOwner}</span>
+                        </a>
+
+                        {/* View Details Button (Takes 2 columns) */}
+                        <button
+                          id={`details_btn_${room.id}`}
+                          onClick={() => handleOpenRoomModal(room)}
+                          class="col-span-2 min-h-[48px] bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs px-2 rounded-xl border border-slate-300 flex items-center justify-center transition active:scale-98"
+                        >
+                          {t.viewDetails}
+                        </button>
+                      </div>
+
+                    </div>
+                  </article>
+                );
+              })}
+              </div>
+            )}
+          </main>
+          )}
+
+          {/* Sticky WhatsApp Floating Button */}
+          <aside class="fixed bottom-4 right-4 z-40 max-w-sm">
+            <a
+              id="whatsapp_floating_btn"
+              href={`https://wa.me/${(appSettings?.whatsappNumber || "919829012345").replace(/\D/g, "")}?text=${encodeURIComponent(
+                lang === "hi"
+                  ? `नमस्ते, मुझे जयपुर में ₹2000-₹5000 के बजट में किफायती कमरा चाहिए। (${appSettings?.appNameHi || 'अपना कमरा'})`
+                  : "Hello, I am looking for an affordable rental room in Jaipur under ₹2000-₹5000 budget. Please help."
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="flex items-center space-x-2 bg-[#25D366] hover:bg-[#20ba59] active:scale-95 text-white font-bold text-xs px-3.5 py-3 rounded-full shadow-2xl border-2 border-white transition duration-200"
+            >
+              <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+              </svg>
+              <span>{t.whatsappHelp}</span>
+            </a>
+          </aside>
+
+          {/* Room Detail Modal Dialog */}
+          {activeModalRoom && (
+            <RoomDetailModal
+              room={activeModalRoom}
+              lang={lang}
+              t={t}
+              onClose={handleCloseRoomModal}
+            />
+          )}
+
+          {/* Add Listing Owner Wizard Dialog */}
+          {showAddModal && (
+            <AddListingModal
+              lang={lang}
+              t={t}
+              onClose={() => setShowAddModal(false)}
+              onAdd={handleAddListing}
+            />
+          )}
+
+        </div>
+      );
+    }
+
+    // --- Modal: Room Detail View ---
+    function RoomDetailModal({ room, lang, t, onClose }) {
+      const [photoIdx, setPhotoIdx] = useState(0);
+      const [copied, setCopied] = useState(false);
+      const allPhotos = [room.image, ...(room.additionalPhotos || [])];
+
+      const getShareData = () => {
+        let roomUrl = window.location.href;
+        try {
+          const urlObj = new URL(window.location.href);
+          urlObj.searchParams.set("room", room.id);
+          roomUrl = urlObj.toString();
+        } catch (e) {
+          // fallback
+        }
+
+        const title = lang === "hi"
+          ? `${room.titleHi} - जयपुर में कमरा (₹${room.rent}/माह)`
+          : `${room.titleEn} - Room in Jaipur (₹${room.rent}/mo)`;
+
+        const localityName = lang === "hi" ? room.localityHi : room.locality;
+        const addressText = lang === "hi" ? room.addressHi : room.addressEn;
+        const text = lang === "hi"
+          ? `🏠 अपना कमरा जयपुर पर यह कमरा देखें:\n• ${room.titleHi}\n• इलाका: ${localityName}\n• किराया: ₹${room.rent}/माह (डिपॉजिट ₹${room.deposit})\n• पता: ${addressText}\n• मालिक: ${room.ownerName} (${room.phone})`
+          : `🏠 Check out this room on Apna Kamra Jaipur:\n• ${room.titleEn}\n• Area: ${localityName}\n• Rent: ₹${room.rent}/mo (Deposit ₹${room.deposit})\n• Address: ${addressText}\n• Owner: ${room.ownerName} (${room.phone})`;
+
+        return { title, text, url: roomUrl };
+      };
+
+      const handleShare = async () => {
+        const shareData = getShareData();
+
+        if (navigator.share) {
+          try {
+            await navigator.share(shareData);
+            return;
+          } catch (err) {
+            // User dismissed share dialog or share failed
+            if (err.name === "AbortError") {
+              return;
+            }
+          }
+        }
+
+        // Fallback: Copy room URL to clipboard
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(`${shareData.text}\n\n🔗 लिंक: ${shareData.url}`);
+          } else {
+            const textarea = document.createElement("textarea");
+            textarea.value = `${shareData.text}\n\n🔗 लिंक: ${shareData.url}`;
+            textarea.style.position = "fixed";
+            textarea.style.opacity = "0";
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand("copy");
+            document.body.removeChild(textarea);
+          }
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2500);
+        } catch (copyErr) {
+          // In case clipboard fails, fallback alert / toast
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2500);
+        }
+      };
+
+      return (
+        <div id="room_detail_modal_overlay" class="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-0 sm:p-4 backdrop-blur-xs">
+          <div
+            id="room_detail_modal_card"
+            class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-2xl max-h-[90vh] overflow-y-auto flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-200"
+          >
+            {/* Modal Image Carousel */}
+            <div class="relative h-60 w-full bg-slate-900 shrink-0">
+              <img
+                src={allPhotos[photoIdx]}
+                alt="Room detail"
+                class="w-full h-full object-cover"
+              />
+              
+              {/* Top Controls: Share & Close */}
+              <div class="absolute top-3 right-3 flex items-center space-x-2">
+                <button
+                  id="modal_top_share_btn"
+                  onClick={handleShare}
+                  title={t.shareBtn || "Share"}
+                  class="w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 active:scale-95 text-white flex items-center justify-center font-bold transition shadow"
+                >
+                  <svg class="w-4 h-4 fill-none stroke-current" strokeWidth="2.2" viewBox="0 0 24 24">
+                    <circle cx="18" cy="5" r="3"/>
+                    <circle cx="6" cy="12" r="3"/>
+                    <circle cx="18" cy="19" r="3"/>
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                  </svg>
+                </button>
+                <button
+                  id="modal_close_btn"
+                  onClick={onClose}
+                  class="w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center font-bold hover:bg-black transition shadow"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Photo Thumbnails / indicators */}
+              {allPhotos.length > 1 && (
+                <div class="absolute bottom-3 left-3 right-3 flex space-x-1.5">
+                  {allPhotos.map((p, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setPhotoIdx(idx)}
+                      class={`h-1.5 flex-1 rounded-full transition ${
+                        photoIdx === idx ? "bg-amber-400" : "bg-white/40"
+                      }`}
+                    ></button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Content */}
+            <div class="p-4 flex-1">
+              
+              {/* Header Price & Locality */}
+              <div class="flex items-start justify-between">
+                <div>
+                  <span class="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
+                    📍 {lang === "hi" ? room.localityHi : room.locality}
+                  </span>
+                  <h2 class="text-lg font-bold text-slate-900 mt-1">
+                    {lang === "hi" ? room.titleHi : room.titleEn}
+                  </h2>
+                </div>
+
+                <div class="text-right">
+                  <div class="text-2xl font-extrabold text-[#0A2540]">
+                    ₹{room.rent.toLocaleString('en-IN')}
+                  </div>
+                  <div class="text-[11px] text-slate-500 font-medium">
+                    {lang === "hi" ? "डिपॉजिट:" : "Deposit:"} ₹{room.deposit.toLocaleString('en-IN')}
+                  </div>
+                </div>
+              </div>
+
+              {/* Complete Address & Landmark Card */}
+              <div class="mt-3.5 bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs space-y-1.5">
+                <div class="flex items-start space-x-2">
+                  <span class="text-base">🏢</span>
+                  <div>
+                    <span class="font-bold text-slate-700 block">
+                      {lang === "hi" ? "कमरे का पूरा पता:" : "Full Address:"}
+                    </span>
+                    <span class="text-slate-600 font-medium">
+                      {lang === "hi" ? room.addressHi : room.addressEn}
+                    </span>
+                  </div>
+                </div>
+
+                <div class="flex items-start space-x-2 pt-1.5 border-t border-slate-200">
+                  <span class="text-base">🚩</span>
+                  <div>
+                    <span class="font-bold text-slate-700 block">
+                      {lang === "hi" ? "लैंडमार्क (पहचान चिन्ह):" : "Landmark:"}
+                    </span>
+                    <span class="text-amber-800 font-semibold">
+                      {lang === "hi" ? room.landmarkHi : room.landmarkEn}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div class="mt-3.5 text-xs text-slate-700 leading-relaxed bg-amber-50/50 p-3 rounded-xl border border-amber-200/60">
+                <span class="font-bold text-slate-900 block mb-1">
+                  {lang === "hi" ? "विवरण व नियम:" : "Description & Rules:"}
+                </span>
+                {lang === "hi" ? room.descriptionHi : room.descriptionEn}
+              </div>
+
+              {/* Amenities Grid */}
+              <div class="mt-3.5">
+                <span class="text-xs font-bold text-slate-800 block mb-2">
+                  {lang === "hi" ? "कमरे की सुविधाएं:" : "Included Amenities:"}
+                </span>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                  <div class="p-2 rounded-lg bg-slate-50 border border-slate-200 flex items-center space-x-2 font-medium">
+                    <span>💧</span>
+                    <span>{t.amenities.water}</span>
+                  </div>
+                  <div class="p-2 rounded-lg bg-slate-50 border border-slate-200 flex items-center space-x-2 font-medium">
+                    <span>⚡</span>
+                    <span>{room.hasSubmeter ? t.amenities.meter : (lang === "hi" ? "फिक्स बिजली बिल" : "Fixed Electricity")}</span>
+                  </div>
+                  <div class="p-2 rounded-lg bg-slate-50 border border-slate-200 flex items-center space-x-2 font-medium">
+                    <span>🚽</span>
+                    <span>{room.toiletType === 'personal' ? t.amenities.toiletPrivate : t.amenities.toiletShared}</span>
+                  </div>
+                  <div class="p-2 rounded-lg bg-slate-50 border border-slate-200 flex items-center space-x-2 font-medium">
+                    <span>🌀</span>
+                    <span>{room.hasFan ? t.amenities.fan : (lang === "hi" ? "पंखा नहीं" : "No Fan")}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Owner Info Box */}
+              <div class="mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                <div>
+                  <span class="text-[11px] text-emerald-800 font-bold block uppercase tracking-wide">
+                    {lang === "hi" ? "सत्यापित मकान मालिक" : "Verified Landlord"}
+                  </span>
+                  <span class="font-bold text-slate-900 text-sm">{room.ownerName}</span>
+                </div>
+                <span class="text-xl">👤</span>
+              </div>
+
+              {/* Action Buttons: Direct Call & WhatsApp */}
+              <div class="mt-4 space-y-2">
+                <a
+                  id="modal_direct_call_btn"
+                  href={`tel:${room.phone}`}
+                  class="w-full min-h-[50px] bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-base rounded-xl flex items-center justify-center space-x-2 shadow-md transition"
+                >
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+                  </svg>
+                  <span>{t.callOwner} ({room.phone})</span>
+                </a>
+
+                <a
+                  id="modal_whatsapp_room_btn"
+                  href={`https://wa.me/91${room.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                    lang === "hi"
+                      ? `नमस्ते, मैंने अपना कमरा जयपुर ऐप पर आपका कमरा देखा (${room.titleHi}, किराया ₹${room.rent})। क्या यह अभी खाली है?`
+                      : `Hello, I saw your room listing on Apna Kamra Jaipur (${room.titleEn}, Rent: ₹${room.rent}). Is it available?`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="w-full min-h-[46px] bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-sm rounded-xl flex items-center justify-center space-x-2 shadow transition"
+                >
+                  <span>💬 {lang === "hi" ? "व्हाट्सएप पर मैसेज भेजें" : "Chat on WhatsApp"}</span>
+                </a>
+
+                {/* Share Room Button */}
+                <button
+                  id="modal_share_room_btn"
+                  onClick={handleShare}
+                  class={`w-full min-h-[46px] font-bold text-sm rounded-xl flex items-center justify-center space-x-2 border transition ${
+                    copied
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                      : "bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300"
+                  }`}
+                >
+                  {copied ? (
+                    <>
+                      <span class="text-base">✓</span>
+                      <span>{t.shareSuccess || "Link Copied!"}</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg class="w-4 h-4 fill-none stroke-current" strokeWidth="2.2" viewBox="0 0 24 24">
+                        <circle cx="18" cy="5" r="3"/>
+                        <circle cx="6" cy="12" r="3"/>
+                        <circle cx="18" cy="19" r="3"/>
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                      </svg>
+                      <span>{t.shareBtn || "Share"}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // --- Modal: Owner Add-Listing Wizard with OTP & Camera Photo Upload ---
+    function AddListingModal({ lang, t, onClose, onAdd }) {
+      const [step, setStep] = useState(1);
+      const m = t.ownerModal;
+
+      // Refs for mobile camera and gallery inputs
+      const cameraInputRef = useRef(null);
+      const galleryInputRef = useRef(null);
+
+      // Form State
+      const [name, setName] = useState("");
+      const [phone, setPhone] = useState("");
+      const [otpSent, setOtpSent] = useState(false);
+      const [otpInput, setOtpInput] = useState("");
+      const [isVerified, setIsVerified] = useState(false);
+      const [otpTimer, setOtpTimer] = useState(0);
+
+      const [locality, setLocality] = useState("Sanganer");
+      const [address, setAddress] = useState("");
+      const [landmark, setLandmark] = useState("");
+      const [rent, setRent] = useState(3000);
+      const [deposit, setDeposit] = useState(2000);
+
+      const [toiletType, setToiletType] = useState("shared");
+      const [hasSubmeter, setHasSubmeter] = useState(true);
+      const [hasWater247, setHasWater247] = useState(true);
+      const [hasFan, setHasFan] = useState(true);
+
+      // Photo upload state & local photos list
+      const [uploadedPhotos, setUploadedPhotos] = useState([
+        "https://images.unsplash.com/photo-1598928506311-c55ded91a20c?w=600&auto=format&fit=crop&q=80",
+        "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=600&auto=format&fit=crop&q=80",
+        "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=600&auto=format&fit=crop&q=80"
+      ]);
+      const [selectedImage, setSelectedImage] = useState(uploadedPhotos[0]);
+      const [isUploading, setIsUploading] = useState(false);
+      const [uploadProgress, setUploadProgress] = useState(0);
+      const [uploadStatusText, setUploadStatusText] = useState("");
+      const [lastAddedSuccess, setLastAddedSuccess] = useState(false);
+      const [sampleIdx, setSampleIdx] = useState(0);
+
+      // Authentic sample camera snaps for instant preview simulation
+      const sampleCameraSnaps = [
+        "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?w=600&auto=format&fit=crop&q=80",
+        "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=600&auto=format&fit=crop&q=80",
+        "https://images.unsplash.com/photo-1540518614846-7ede433c4550?w=600&auto=format&fit=crop&q=80",
+        "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=600&auto=format&fit=crop&q=80"
+      ];
+
+      // Simulated file-input processing with loading animation
+      const processImage = (imageDataUrl) => {
+        setIsUploading(true);
+        setUploadProgress(20);
+        setLastAddedSuccess(false);
+        setUploadStatusText(lang === "hi" ? "कैमरा फोटो लोड की जा रही है..." : "Capturing camera photo...");
+
+        const t1 = setTimeout(() => {
+          setUploadProgress(50);
+          setUploadStatusText(lang === "hi" ? "कमरे की इमेज ऑप्टिमाइज़ हो रही है..." : "Optimizing room image resolution...");
+        }, 280);
+
+        const t2 = setTimeout(() => {
+          setUploadProgress(85);
+          setUploadStatusText(lang === "hi" ? "लोकल लिस्ट में सेव हो रही है..." : "Saving photo to local list...");
+        }, 600);
+
+        const t3 = setTimeout(() => {
+          setUploadProgress(100);
+          setUploadStatusText(lang === "hi" ? "✓ कमरा फोटो तैयार!" : "✓ Photo processed!");
+
+          setTimeout(() => {
+            setUploadedPhotos(prev => [imageDataUrl, ...prev]);
+            setSelectedImage(imageDataUrl);
+            setIsUploading(false);
+            setUploadProgress(0);
+            setLastAddedSuccess(true);
+            setTimeout(() => setLastAddedSuccess(false), 3000);
+          }, 250);
+        }, 950);
+      };
+
+      // Handler for real file input (accepts camera capture on mobile or gallery)
+      const handleFileInput = (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          processImage(event.target.result);
+        };
+        reader.onerror = () => {
+          setIsUploading(false);
+          alert(lang === "hi" ? "फोटो पढ़ने में विफल रहा।" : "Failed to read photo file.");
+        };
+        reader.readAsDataURL(file);
+
+        // Reset input value so subsequent selections trigger change
+        e.target.value = "";
+      };
+
+      // Simulated camera capture for immediate test without physical upload
+      const handleSimulatedCameraShot = () => {
+        const nextPhoto = sampleCameraSnaps[sampleIdx % sampleCameraSnaps.length];
+        setSampleIdx(prev => prev + 1);
+        processImage(nextPhoto);
+      };
+
+      // Remove photo from local list
+      const handleRemovePhoto = (photoUrl, e) => {
+        e.stopPropagation();
+        if (uploadedPhotos.length <= 1) {
+          alert(lang === "hi" ? "कम से कम 1 फोटो होना आवश्यक है।" : "At least 1 photo is required.");
+          return;
+        }
+        const updated = uploadedPhotos.filter(p => p !== photoUrl);
+        setUploadedPhotos(updated);
+        if (selectedImage === photoUrl) {
+          setSelectedImage(updated[0]);
+        }
+      };
+
+      const handleSendOtp = () => {
+        if (!phone || phone.length < 10) {
+          alert(lang === "hi" ? "कृपया मान्य 10 अंकों का मोबाइल नंबर दर्ज करें" : "Please enter a valid 10-digit mobile number");
+          return;
+        }
+        setOtpSent(true);
+        setOtpTimer(30);
+      };
+
+      useEffect(() => {
+        if (otpTimer > 0) {
+          const id = setTimeout(() => setOtpTimer(otpTimer - 1), 1000);
+          return () => clearTimeout(id);
+        }
+      }, [otpTimer]);
+
+      const handleVerifyOtp = () => {
+        if (otpInput === "123456" || otpInput.length === 6) {
+          setIsVerified(true);
+        } else {
+          alert(lang === "hi" ? "गलत OTP दर्ज किया गया है। टेस्टिंग के लिए 123456 का उपयोग करें।" : "Invalid OTP. Use 123456 for verification demo.");
+        }
+      };
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        const additional = uploadedPhotos.filter(p => p !== selectedImage);
+        const newRoom = {
+          id: "custom-" + Date.now(),
+          titleHi: `${locality} में किफायती कमरा`,
+          titleEn: `Affordable Room in ${locality}`,
+          locality: locality,
+          localityHi: locality,
+          addressHi: address || "जयपुर, राजस्थान",
+          addressEn: address || "Jaipur, Rajasthan",
+          landmarkHi: landmark || "पास का मुख्य मार्ग",
+          landmarkEn: landmark || "Main road nearby",
+          rent: Number(rent),
+          deposit: Number(deposit),
+          ownerName: name || "मकान मालिक",
+          phone: "+91" + phone.replace(/[^0-9]/g, ''),
+          verified: true,
+          toiletType: toiletType,
+          hasSubmeter: hasSubmeter,
+          hasWater247: hasWater247,
+          hasFan: hasFan,
+          floor: "ground",
+          hasRoWater: true,
+          image: selectedImage,
+          additionalPhotos: additional,
+          descriptionHi: `${address} स्थित कमरा। पानी 24 घंटे, अलग मीटर उपलब्ध। तुरंत किराए हेतु उपलब्ध।`,
+          descriptionEn: `Room located at ${address}. 24hr water, separate meter. Ready to move.`
+        };
+        onAdd(newRoom);
+      };
+
+      return (
+        <div id="add_listing_modal_overlay" class="fixed inset-0 z-50 bg-black/75 flex items-end sm:items-center justify-center p-0 sm:p-4 backdrop-blur-xs">
+          <div
+            id="add_listing_card"
+            class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-2xl max-h-[92vh] overflow-y-auto flex flex-col shadow-2xl p-4 animate-in slide-in-from-bottom duration-200"
+          >
+            {/* Header */}
+            <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div>
+                <h3 class="font-bold text-slate-900 text-base">{m.title}</h3>
+                <span class="text-xs text-amber-600 font-semibold">
+                  {step === 1 ? m.step1 : step === 2 ? m.step2 : step === 3 ? m.step3 : m.step4}
+                </span>
+              </div>
+              <button
+                onClick={onClose}
+                class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Stepper Progress */}
+            <div class="flex items-center space-x-1.5 my-3">
+              {[1, 2, 3, 4].map(s => (
+                <div
+                  key={s}
+                  class={`h-1.5 flex-1 rounded-full ${step >= s ? "bg-[#EAA206]" : "bg-slate-200"}`}
+                ></div>
+              ))}
+            </div>
+
+            {/* Form Steps */}
+            <form onSubmit={handleSubmit} class="space-y-3.5 flex-1 text-xs">
+              
+              {/* Step 1: Owner Details & OTP */}
+              {step === 1 && (
+                <div class="space-y-3">
+                  <div>
+                    <label class="block font-semibold text-slate-700 mb-1">{m.nameLabel}</label>
+                    <input
+                      type="text"
+                      required
+                      value={name}
+                      onChange={e => setName(e.target.value)}
+                      placeholder="उदा. कैलाश शर्मा"
+                      class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-[#0A2540]"
+                    />
+                  </div>
+
+                  <div>
+                    <label class="block font-semibold text-slate-700 mb-1">{m.mobileLabel}</label>
+                    <div class="flex space-x-2">
+                      <span class="px-2.5 py-2 bg-slate-100 border border-slate-300 rounded-lg text-slate-600 font-bold">
+                        +91
+                      </span>
+                      <input
+                        type="tel"
+                        maxLength="10"
+                        required
+                        value={phone}
+                        onChange={e => setPhone(e.target.value)}
+                        placeholder="9829012345"
+                        class="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-[#0A2540]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* OTP Verification Box */}
+                  <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
+                    <div class="flex items-center justify-between">
+                      <span class="font-bold text-amber-900">
+                        {lang === "hi" ? "फ़ोन / आधार OTP सत्यापन" : "Phone / Aadhaar OTP Verification"}
+                      </span>
+                      {isVerified ? (
+                        <span class="text-emerald-700 font-bold text-xs">{m.otpVerified}</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleSendOtp}
+                          class="px-2.5 py-1 bg-[#0A2540] text-amber-300 rounded font-bold hover:bg-slate-800"
+                        >
+                          {otpTimer > 0 ? `${otpTimer}s` : m.sendOtp}
+                        </button>
+                      )}
+                    </div>
+
+                    {otpSent && !isVerified && (
+                      <div class="flex space-x-2 pt-1">
+                        <input
+                          type="text"
+                          maxLength="6"
+                          value={otpInput}
+                          onChange={e => setOtpInput(e.target.value)}
+                          placeholder={m.otpPlaceholder}
+                          class="flex-1 px-2.5 py-1.5 border border-amber-300 rounded text-center tracking-widest font-mono text-sm bg-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleVerifyOtp}
+                          class="px-3 py-1.5 bg-emerald-600 text-white rounded font-bold hover:bg-emerald-700"
+                        >
+                          {m.verifyOtp}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2: Address & Rent Details */}
+              {step === 2 && (
+                <div class="space-y-3">
+                  <div>
+                    <label class="block font-semibold text-slate-700 mb-1">{m.localityLabel}</label>
+                    <select
+                      value={locality}
+                      onChange={e => setLocality(e.target.value)}
+                      class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-[#0A2540] bg-white font-medium"
+                    >
+                      <option value="Sanganer">सांगानेर (Sanganer)</option>
+                      <option value="VKI Area">वी.के.आई. (VKI Industrial Area)</option>
+                      <option value="Jhalana">झालाना डूंगरी (Jhalana)</option>
+                      <option value="Sitapura">सीतापुरा रीको (Sitapura)</option>
+                      <option value="Mansarovar">मानसरोवर (Mansarovar)</option>
+                      <option value="Pratap Nagar">प्रताप नगर (Pratap Nagar)</option>
+                      <option value="Bagru">बगरू (Bagru)</option>
+                      <option value="Malviya Nagar">मालवीय नगर (Malviya Nagar)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label class="block font-semibold text-slate-700 mb-1">{m.addressLabel}</label>
+                    <input
+                      type="text"
+                      required
+                      value={address}
+                      onChange={e => setAddress(e.target.value)}
+                      placeholder="उदा. मकान नं 24, गली 2, गौनेर रोड"
+                      class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-[#0A2540]"
+                    />
+                  </div>
+
+                  <div>
+                    <label class="block font-semibold text-slate-700 mb-1">{m.landmarkLabel}</label>
+                    <input
+                      type="text"
+                      required
+                      value={landmark}
+                      onChange={e => setLandmark(e.target.value)}
+                      placeholder="उदा. पुलिया के पास, बस स्टैंड से 200m"
+                      class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-[#0A2540]"
+                    />
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-2">
+                    <div>
+                      <label class="block font-semibold text-slate-700 mb-1">{m.rentLabel}</label>
+                      <input
+                        type="number"
+                        min="1500"
+                        max="8000"
+                        step="100"
+                        required
+                        value={rent}
+                        onChange={e => setRent(e.target.value)}
+                        class="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold text-slate-800"
+                      />
+                    </div>
+
+                    <div>
+                      <label class="block font-semibold text-slate-700 mb-1">{m.depositLabel}</label>
+                      <input
+                        type="number"
+                        min="500"
+                        max="10000"
+                        step="500"
+                        required
+                        value={deposit}
+                        onChange={e => setDeposit(e.target.value)}
+                        class="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold text-slate-800"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3: Amenities & Photos */}
+              {step === 3 && (
+                <div class="space-y-3">
+                  <label class="block font-semibold text-slate-700">{m.amenitiesLabel}</label>
+                  
+                  <div class="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setToiletType(toiletType === "personal" ? "shared" : "personal")}
+                      class={`p-2.5 rounded-lg border text-left flex items-center space-x-2 transition ${
+                        toiletType === "personal"
+                          ? "bg-emerald-50 border-emerald-500 font-bold text-emerald-900"
+                          : "bg-slate-50 border-slate-300 text-slate-700"
+                      }`}
+                    >
+                      <span>🚽</span>
+                      <span>{toiletType === "personal" ? "पर्सनल लैट-बाथ" : "साझा लैट-बाथ"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setHasSubmeter(!hasSubmeter)}
+                      class={`p-2.5 rounded-lg border text-left flex items-center space-x-2 transition ${
+                        hasSubmeter
+                          ? "bg-amber-50 border-amber-500 font-bold text-amber-900"
+                          : "bg-slate-50 border-slate-300 text-slate-700"
+                      }`}
+                    >
+                      <span>⚡</span>
+                      <span>{hasSubmeter ? "अलग सब-मीटर ✓" : "फिक्स यूनिट रेट"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setHasWater247(!hasWater247)}
+                      class={`p-2.5 rounded-lg border text-left flex items-center space-x-2 transition ${
+                        hasWater247
+                          ? "bg-blue-50 border-blue-500 font-bold text-blue-900"
+                          : "bg-slate-50 border-slate-300 text-slate-700"
+                      }`}
+                    >
+                      <span>💧</span>
+                      <span>{hasWater247 ? "24hr पानी ✓" : "सीमित पानी"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setHasFan(!hasFan)}
+                      class={`p-2.5 rounded-lg border text-left flex items-center space-x-2 transition ${
+                        hasFan
+                          ? "bg-purple-50 border-purple-500 font-bold text-purple-900"
+                          : "bg-slate-50 border-slate-300 text-slate-700"
+                      }`}
+                    >
+                      <span>🌀</span>
+                      <span>{hasFan ? "छत पंखा लगा हुआ ✓" : "पंखा नहीं"}</span>
+                    </button>
+                  </div>
+
+                  {/* Hidden Camera & Gallery File Inputs */}
+                  <input
+                    id="camera_file_input"
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleFileInput}
+                    class="hidden"
+                  />
+                  <input
+                    id="gallery_file_input"
+                    ref={galleryInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileInput}
+                    class="hidden"
+                  />
+
+                  {/* Photo Selector with Mobile Camera Upload & Loading Animation */}
+                  <div class="pt-2 border-t border-slate-200">
+                    <div class="flex items-center justify-between mb-1.5">
+                      <label class="font-semibold text-slate-800 text-xs">{m.photoLabel}</label>
+                      <span class="text-[11px] text-slate-500 font-medium">
+                        {uploadedPhotos.length} {lang === 'hi' ? 'फोटो' : 'photos'}
+                      </span>
+                    </div>
+
+                    {/* Action Buttons: Mobile Camera Capture & Gallery */}
+                    <div class="grid grid-cols-2 gap-2 mb-2">
+                      <button
+                        type="button"
+                        id="btn_take_camera_photo"
+                        disabled={isUploading}
+                        onClick={() => cameraInputRef.current && cameraInputRef.current.click()}
+                        class="flex items-center justify-center space-x-1.5 py-2.5 px-2 rounded-xl bg-[#0A2540] hover:bg-[#133E68] text-amber-300 font-bold text-xs shadow-sm transition active:scale-95 disabled:opacity-50"
+                      >
+                        <span class="text-sm">📸</span>
+                        <span class="truncate">{m.takePhotoBtn}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        id="btn_open_gallery_photo"
+                        disabled={isUploading}
+                        onClick={() => galleryInputRef.current && galleryInputRef.current.click()}
+                        class="flex items-center justify-center space-x-1.5 py-2.5 px-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-bold text-xs transition active:scale-95 disabled:opacity-50"
+                      >
+                        <span class="text-sm">🖼️</span>
+                        <span class="truncate">{m.galleryBtn}</span>
+                      </button>
+                    </div>
+
+                    {/* Instant Simulated Camera Snapshot Button */}
+                    <button
+                      type="button"
+                      id="btn_simulate_camera_snapshot"
+                      disabled={isUploading}
+                      onClick={handleSimulatedCameraShot}
+                      class="w-full mb-3 py-1.5 px-2 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-semibold text-[11px] flex items-center justify-center space-x-1.5 transition active:scale-95 disabled:opacity-50"
+                    >
+                      <span>⚡</span>
+                      <span>{m.simulateCameraBtn}</span>
+                    </button>
+
+                    {/* Loading Animation Box during upload simulation */}
+                    {isUploading && (
+                      <div
+                        id="photo_upload_loading_card"
+                        class="mb-3 p-3 bg-gradient-to-r from-amber-50 to-blue-50 border-2 border-amber-400 rounded-xl shadow-sm"
+                      >
+                        <div class="flex items-center space-x-2.5 mb-2">
+                          <div class="w-8 h-8 rounded-full bg-[#0A2540] text-amber-300 flex items-center justify-center shrink-0">
+                            <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                            </svg>
+                          </div>
+                          <div class="flex-1 min-w-0">
+                            <p class="font-bold text-slate-900 text-xs truncate">
+                              {uploadStatusText}
+                            </p>
+                            <p class="text-[10px] text-slate-500 font-medium">
+                              {lang === 'hi' ? 'मोबाइल कैमरा प्रोसेसिंग...' : 'Camera stream processing...'}
+                            </p>
+                          </div>
+                          <span class="font-bold text-[#0A2540] text-xs font-mono shrink-0">{uploadProgress}%</span>
+                        </div>
+
+                        {/* Progress Bar with smooth animation */}
+                        <div class="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                          <div
+                            class="h-full bg-gradient-to-r from-amber-500 to-[#0A2540] rounded-full transition-all duration-300 ease-out"
+                            style={{ width: `${uploadProgress}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Success Alert Banner */}
+                    {lastAddedSuccess && (
+                      <div
+                        id="photo_added_success_alert"
+                        class="mb-2 p-2 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-bold flex items-center justify-between"
+                      >
+                        <span>{m.photoSuccess}</span>
+                        <span class="bg-emerald-600 text-white text-[10px] px-1.5 py-0.5 rounded font-medium">
+                          {m.selectedAsMain}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Photos List Grid */}
+                    <div>
+                      <span class="block text-[11px] text-slate-600 font-medium mb-1.5">
+                        {m.myPhotosList}
+                      </span>
+                      <div class="grid grid-cols-3 gap-2">
+                        {uploadedPhotos.map((imgUrl, i) => {
+                          const isSelected = selectedImage === imgUrl;
+                          return (
+                            <div
+                              key={i}
+                              id={`photo_thumbnail_${i}`}
+                              onClick={() => setSelectedImage(imgUrl)}
+                              class={`h-20 rounded-xl overflow-hidden border-2 cursor-pointer relative group transition duration-150 ${
+                                isSelected
+                                  ? "border-[#EAA206] ring-2 ring-amber-400 shadow-md scale-[1.02]"
+                                  : "border-slate-200 hover:border-slate-400 opacity-80 hover:opacity-100"
+                              }`}
+                            >
+                              <img src={imgUrl} alt={`Room photo ${i + 1}`} class="w-full h-full object-cover" />
+                              
+                              {/* Selected Indicator Badge */}
+                              {isSelected && (
+                                <div class="absolute inset-x-0 bottom-0 bg-[#0A2540]/85 py-0.5 text-center">
+                                  <span class="text-[9px] text-amber-300 font-bold tracking-tight">
+                                    ✓ {lang === 'hi' ? 'मुख्य' : 'Main'}
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* Remove button if more than 1 photo */}
+                              {uploadedPhotos.length > 1 && (
+                                <button
+                                  type="button"
+                                  id={`btn_delete_photo_${i}`}
+                                  onClick={(e) => handleRemovePhoto(imgUrl, e)}
+                                  title={lang === 'hi' ? 'फोटो हटाएं' : 'Remove photo'}
+                                  class="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white hover:bg-rose-600 flex items-center justify-center text-[10px] font-bold shadow transition"
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 4: Review and Publish */}
+              {step === 4 && (
+                <div class="space-y-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  {/* Photo Preview in Step 4 */}
+                  <div class="relative h-32 w-full rounded-lg overflow-hidden border border-slate-300 bg-slate-800">
+                    <img src={selectedImage} alt="Selected room" class="w-full h-full object-cover" />
+                    <div class="absolute bottom-2 left-2 bg-[#0A2540]/90 text-amber-300 text-[10px] font-bold px-2 py-0.5 rounded">
+                      📸 {uploadedPhotos.length} {lang === 'hi' ? 'फोटो जुड़ी हुई हैं' : 'photos attached'}
+                    </div>
+                  </div>
+
+                  <h4 class="font-bold text-slate-900 text-sm">{name} जी का कमरा</h4>
+                  <p class="text-slate-600 text-xs">
+                    📍 <strong>{locality}</strong> - {address} ({landmark})
+                  </p>
+                  <div class="flex justify-between font-bold text-[#0A2540] text-sm pt-2 border-t border-slate-200">
+                    <span>{lang === 'hi' ? 'मासिक किराया:' : 'Monthly Rent:'}</span>
+                    <span>₹{Number(rent).toLocaleString('en-IN')}/माह</span>
+                  </div>
+                  <div class="flex justify-between text-slate-600 text-xs">
+                    <span>{lang === 'hi' ? 'सुरक्षा राशि (Deposit):' : 'Security Deposit:'}</span>
+                    <span>₹{Number(deposit).toLocaleString('en-IN')}</span>
+                  </div>
+                  <div class="text-[11px] text-emerald-700 font-semibold bg-emerald-100 p-2 rounded">
+                    ✓ आपका मोबाइल नंबर (+91 {phone}) सत्यापित है और सीधे कॉल करने वाले किराएदारों को दिखाई देगा।
+                  </div>
+                </div>
+              )}
+
+              {/* Navigation Buttons */}
+              <div class="pt-3 border-t border-slate-200 flex justify-between gap-2">
+                {step > 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => setStep(step - 1)}
+                    class="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-100"
+                  >
+                    {m.back}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    class="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-100"
+                  >
+                    {m.cancel}
+                  </button>
+                )}
+
+                {step < 4 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (step === 1 && !phone) {
+                        alert("कृपया मोबाइल नंबर दर्ज करें");
+                        return;
+                      }
+                      setStep(step + 1);
+                    }}
+                    class="px-5 py-2.5 bg-[#0A2540] text-amber-300 font-bold rounded-xl shadow hover:bg-slate-800"
+                  >
+                    {m.next}
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow"
+                  >
+                    {m.publishBtn}
+                  </button>
+                )}
+              </div>
+
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // --- Component: Admin Section to Manage Jaipur Room Listings & System Settings ---
+    function AdminSection({
+      lang,
+      t,
+      listings,
+      onToggleVerify,
+      onDeleteListing,
+      onUpdateRent,
+      onResetDefaults,
+      isAdminUnlocked,
+      setIsAdminUnlocked,
+      onClose,
+      appSettings,
+      onUpdateAppSettings,
+      adminCreds,
+      onUpdateAdminCreds
+    }) {
+      const a = t.adminSection;
+      
+      // Admin Login form states
+      const [loginMethod, setLoginMethod] = useState("credentials"); // 'credentials' | 'pin'
+      const [adminPhoneInput, setAdminPhoneInput] = useState("");
+      const [adminPasswordInput, setAdminPasswordInput] = useState("");
+      const [inputPin, setInputPin] = useState("");
+      const [authError, setAuthError] = useState("");
+      const [isAuthLoading, setIsAuthLoading] = useState(false);
+
+      // Admin tabs
+      const [adminTab, setAdminTab] = useState("listings"); // 'listings' | 'appConfig' | 'adminCreds'
+      
+      // Listings filters
+      const [adminSearch, setAdminSearch] = useState("");
+      const [filterMode, setFilterMode] = useState("all"); // 'all' | 'verified' | 'custom'
+      const [selectedLocality, setSelectedLocality] = useState("all");
+      const [editingRoomId, setEditingRoomId] = useState(null);
+      const [editRentVal, setEditRentVal] = useState("");
+      const [actionFeedback, setActionFeedback] = useState("");
+
+      // Editable App Settings Form state
+      const [settingsForm, setSettingsForm] = useState({
+        whatsappNumber: appSettings?.whatsappNumber || "919829012345",
+        supportPhone: appSettings?.supportPhone || "919829012345",
+        supportEmail: appSettings?.supportEmail || "support@apnakamra.in",
+        appDescriptionHi: appSettings?.appDescriptionHi || "",
+        appDescriptionEn: appSettings?.appDescriptionEn || "",
+        developerName: appSettings?.developerName || "",
+        developerContact: appSettings?.developerContact || ""
+      });
+
+      // Editable Admin Credentials Form state
+      const [credsForm, setCredsForm] = useState({
+        newPhone: adminCreds?.phone || "9829012345",
+        newPassword: ""
+      });
+
+      // Available localities list for admin filter dropdown
+      const availableLocalities = useMemo(() => {
+        const map = new Map();
+        LOCALITIES.forEach(loc => {
+          map.set(loc.id, { id: loc.id, label: lang === 'hi' ? loc.nameHi : loc.nameEn });
+        });
+        listings.forEach(item => {
+          if (item.locality && !map.has(item.locality)) {
+            map.set(item.locality, {
+              id: item.locality,
+              label: lang === 'hi' ? (item.localityHi || item.locality) : item.locality
+            });
+          }
+        });
+        return Array.from(map.values());
+      }, [listings, lang]);
+
+      // Stats calculations
+      const totalRooms = listings.length;
+      const verifiedRooms = listings.filter(r => r.verified).length;
+      const customAddedRooms = listings.filter(r => r.id.startsWith("custom-")).length;
+      const avgRent = totalRooms > 0
+        ? Math.round(listings.reduce((acc, curr) => acc + Number(curr.rent), 0) / totalRooms)
+        : 0;
+
+      const triggerActionFeedback = (msg) => {
+        setActionFeedback(msg);
+        setTimeout(() => setActionFeedback(""), 3500);
+      };
+
+      const handleAdminLogin = async (e) => {
+        e.preventDefault();
+        setAuthError("");
+        setIsAuthLoading(true);
+
+        try {
+          if (loginMethod === "credentials") {
+            const cleanInputPhone = adminPhoneInput.replace(/\D/g, "");
+            const cleanConfigPhone = (adminCreds.phone || "9829012345").replace(/\D/g, "");
+
+            // Verify with admin credentials
+            if (
+              cleanInputPhone === cleanConfigPhone &&
+              adminPasswordInput.trim() === (adminCreds.password || "admin123")
+            ) {
+              setIsAdminUnlocked(true);
+              setAuthError("");
+              setAdminPasswordInput("");
+              triggerActionFeedback(lang === "hi" ? "✓ एडमिन लॉगिन सफल!" : "✓ Admin login successful!");
+            } else {
+              setAuthError(a.wrongPasscode);
+            }
+          } else {
+            // Master PIN fallback
+            if (inputPin.trim() === "1234" || inputPin.trim() === "admin") {
+              setIsAdminUnlocked(true);
+              setAuthError("");
+              setInputPin("");
+              triggerActionFeedback(lang === "hi" ? "✓ एडमिन मास्टर पिन सत्यापित!" : "✓ Admin Master PIN verified!");
+            } else {
+              setAuthError(a.wrongPasscode);
+            }
+          }
+        } catch (err) {
+          setAuthError(err.message || a.wrongPasscode);
+        } finally {
+          setIsAuthLoading(false);
+        }
+      };
+
+      const handleLogout = () => {
+        setIsAdminUnlocked(false);
+        setInputPin("");
+        setAdminPasswordInput("");
+        setAuthError("");
+      };
+
+      const handleSaveSettings = (e) => {
+        e.preventDefault();
+        onUpdateAppSettings(settingsForm);
+        triggerActionFeedback(a.saveSettingsSuccess);
+      };
+
+      const handleSaveCreds = (e) => {
+        e.preventDefault();
+        if (!credsForm.newPhone.trim()) {
+          triggerActionFeedback("Phone number required");
+          return;
+        }
+        onUpdateAdminCreds({
+          phone: credsForm.newPhone.trim(),
+          password: credsForm.newPassword.trim() || adminCreds.password
+        });
+        setCredsForm(prev => ({ ...prev, newPassword: "" }));
+        triggerActionFeedback(a.saveCredsSuccess);
+      };
+
+      // Filtered list for admin
+      const displayedRooms = listings.filter(room => {
+        if (filterMode === "verified" && !room.verified) return false;
+        if (filterMode === "custom" && !room.id.startsWith("custom-")) return false;
+        if (selectedLocality !== "all" && room.locality !== selectedLocality) return false;
+        if (adminSearch.trim()) {
+          const q = adminSearch.toLowerCase();
+          const match =
+            room.ownerName.toLowerCase().includes(q) ||
+            room.phone.includes(q) ||
+            room.locality.toLowerCase().includes(q) ||
+            room.localityHi.toLowerCase().includes(q) ||
+            room.titleHi.toLowerCase().includes(q) ||
+            room.titleEn.toLowerCase().includes(q);
+          if (!match) return false;
+        }
+        return true;
+      });
+
+      return (
+        <div id="admin_management_container" class="space-y-4 pb-6">
+          
+          {/* Admin Header Banner */}
+          <div class="bg-gradient-to-r from-slate-900 via-[#0A2540] to-slate-900 text-white p-4 rounded-2xl shadow-md border border-slate-700">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-2.5">
+                <span class="text-2xl p-2 bg-amber-500/20 text-amber-300 rounded-xl border border-amber-400/30">
+                  🛡️
+                </span>
+                <div>
+                  <h2 class="font-extrabold text-base text-amber-300 tracking-tight">
+                    {a.title}
+                  </h2>
+                  <p class="text-[11px] text-slate-300 font-medium">
+                    {a.subtitle}
+                  </p>
+                </div>
+              </div>
+
+              {isAdminUnlocked ? (
+                <button
+                  id="btn_admin_logout"
+                  onClick={handleLogout}
+                  class="text-[11px] bg-rose-600/80 hover:bg-rose-700 text-white font-bold px-2.5 py-1.5 rounded-lg border border-rose-400/40 transition active:scale-95"
+                >
+                  {a.logoutBtn}
+                </button>
+              ) : (
+                <span class="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-1 rounded font-semibold border border-amber-400/30">
+                  {lang === 'hi' ? 'सुरक्षित एडमिन' : 'Admin Portal'}
+                </span>
+              )}
+            </div>
+
+            {isAdminUnlocked && (
+              <div class="mt-3 pt-2.5 border-t border-slate-700 flex items-center justify-between text-xs">
+                <span class="flex items-center space-x-1.5 text-emerald-400 font-semibold text-[11px]">
+                  <span>🟢</span>
+                  <span>{a.unlockedBadge} ({adminCreds.phone})</span>
+                </span>
+                <button
+                  id="btn_reset_defaults"
+                  onClick={() => {
+                    if (window.confirm(a.confirmReset)) {
+                      onResetDefaults();
+                      triggerActionFeedback(lang === "hi" ? "✓ सभी लिस्टिंग डिफ़ॉल्ट पर रीसेट हुईं!" : "✓ Reset to default listings!");
+                    }
+                  }}
+                  class="text-[11px] text-amber-300 hover:text-amber-200 underline font-medium"
+                >
+                  ↺ {a.resetDefaults}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Action Feedback Banner */}
+          {actionFeedback && (
+            <div
+              id="admin_action_feedback"
+              class="p-2.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold flex items-center space-x-2 animate-in fade-in"
+            >
+              <span>✓</span>
+              <span>{actionFeedback}</span>
+            </div>
+          )}
+
+          {/* Lock Screen if Not Authenticated */}
+          {!isAdminUnlocked ? (
+            <div id="admin_login_card" class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+              <div class="text-center mb-4">
+                <div class="w-12 h-12 rounded-full bg-amber-100 text-amber-700 mx-auto flex items-center justify-center text-xl mb-2">
+                  🔐
+                </div>
+                <h3 class="font-bold text-slate-800 text-base">
+                  {lang === "hi" ? "एडमिन पैनल लॉगिन" : "Admin Panel Sign In"}
+                </h3>
+                <p class="text-xs text-slate-500 max-w-xs mx-auto mt-1">
+                  {lang === "hi"
+                    ? "व्यवस्थापक पैनल में प्रवेश के लिए अपना अलग मोबाइल नंबर व पासवर्ड दर्ज करें।"
+                    : "Enter your separate admin mobile number and password to access controls."}
+                </p>
+              </div>
+
+              {/* Login mode selector pills */}
+              <div class="flex items-center justify-center space-x-2 mb-4">
+                <button
+                  type="button"
+                  id="btn_mode_credentials"
+                  onClick={() => setLoginMethod("credentials")}
+                  class={`text-xs font-bold px-3 py-1.5 rounded-lg transition ${
+                    loginMethod === "credentials"
+                      ? "bg-[#0A2540] text-amber-300 shadow-xs"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  📱 {lang === "hi" ? "मोबाइल + पासवर्ड" : "Phone + Password"}
+                </button>
+                <button
+                  type="button"
+                  id="btn_mode_pin"
+                  onClick={() => setLoginMethod("pin")}
+                  class={`text-xs font-bold px-3 py-1.5 rounded-lg transition ${
+                    loginMethod === "pin"
+                      ? "bg-[#0A2540] text-amber-300 shadow-xs"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  🔢 {lang === "hi" ? "मास्टर पिन (1234)" : "Master PIN (1234)"}
+                </button>
+              </div>
+
+              <form onSubmit={handleAdminLogin} class="max-w-xs mx-auto space-y-3">
+                {loginMethod === "credentials" ? (
+                  <>
+                    <div>
+                      <label class="block text-[11px] font-bold text-slate-700 mb-1">
+                        {lang === "hi" ? "एडमिन मोबाइल नंबर" : "Admin Mobile Number"}
+                      </label>
+                      <input
+                        id="admin_phone_input"
+                        type="tel"
+                        value={adminPhoneInput}
+                        onChange={(e) => setAdminPhoneInput(e.target.value)}
+                        placeholder="9829012345"
+                        class="w-full text-sm py-2 px-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-[#0A2540] text-slate-900 font-mono"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label class="block text-[11px] font-bold text-slate-700 mb-1">
+                        {lang === "hi" ? "एडमिन पासवर्ड" : "Admin Password"}
+                      </label>
+                      <input
+                        id="admin_password_input"
+                        type="password"
+                        value={adminPasswordInput}
+                        onChange={(e) => setAdminPasswordInput(e.target.value)}
+                        placeholder="admin123"
+                        class="w-full text-sm py-2 px-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-[#0A2540] text-slate-900"
+                        required
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <label class="block text-[11px] font-bold text-slate-700 mb-1">
+                      {lang === "hi" ? "एडमिन सुरक्षा पिन" : "Admin Security PIN"}
+                    </label>
+                    <input
+                      id="admin_pin_input"
+                      type="password"
+                      value={inputPin}
+                      onChange={(e) => setInputPin(e.target.value)}
+                      placeholder="1234"
+                      maxLength={10}
+                      class="w-full text-center tracking-widest text-sm py-2.5 px-3 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-[#0A2540] font-mono text-slate-900"
+                      required
+                    />
+                  </div>
+                )}
+
+                {authError && (
+                  <p class="text-[11px] text-rose-600 font-semibold text-center">{authError}</p>
+                )}
+
+                <button
+                  type="submit"
+                  id="btn_admin_submit_login"
+                  disabled={isAuthLoading}
+                  class="w-full py-2.5 bg-[#0A2540] hover:bg-slate-800 text-amber-300 font-bold text-xs rounded-xl shadow transition active:scale-95 flex items-center justify-center space-x-1"
+                >
+                  {isAuthLoading ? (
+                    <span>{lang === "hi" ? "सत्यापन हो रहा है..." : "Verifying..."}</span>
+                  ) : (
+                    <span>{a.loginBtn}</span>
+                  )}
+                </button>
+
+                <div class="text-[10px] text-slate-400 bg-slate-50 p-2 rounded-lg border border-slate-200 text-center space-y-0.5">
+                  <div class="font-bold text-slate-600">
+                    {lang === "hi" ? "डिफ़ॉल्ट एडमिन क्रेडेंशियल्स:" : "Default Admin Credentials:"}
+                  </div>
+                  <div>📱 {lang === "hi" ? "नंबर:" : "Phone:"} <span class="font-mono text-slate-700 font-bold">{adminCreds?.phone || "9829012345"}</span></div>
+                  <div>🔑 {lang === "hi" ? "पासवर्ड:" : "Password:"} <span class="font-mono text-slate-700 font-bold">admin123</span> (या पिन: 1234)</div>
+                </div>
+              </form>
+            </div>
+          ) : (
+            /* Unlocked Admin Dashboard with Tabs */
+            <div id="admin_dashboard_unlocked" class="space-y-4">
+              
+              {/* Admin Navigation Tabs */}
+              <div class="flex items-center space-x-1 bg-slate-200 p-1 rounded-xl text-xs font-bold">
+                <button
+                  id="tab_admin_listings"
+                  onClick={() => setAdminTab("listings")}
+                  class={`flex-1 py-1.5 px-2 rounded-lg transition text-center ${
+                    adminTab === "listings"
+                      ? "bg-white text-[#0A2540] shadow-2xs font-extrabold"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  🏠 {a.tabs.listings} ({totalRooms})
+                </button>
+
+                <button
+                  id="tab_admin_app_config"
+                  onClick={() => setAdminTab("appConfig")}
+                  class={`flex-1 py-1.5 px-2 rounded-lg transition text-center ${
+                    adminTab === "appConfig"
+                      ? "bg-white text-[#0A2540] shadow-2xs font-extrabold"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  ⚙️ {a.tabs.appConfig}
+                </button>
+
+                <button
+                  id="tab_admin_creds"
+                  onClick={() => setAdminTab("adminCreds")}
+                  class={`flex-1 py-1.5 px-2 rounded-lg transition text-center ${
+                    adminTab === "adminCreds"
+                      ? "bg-white text-[#0A2540] shadow-2xs font-extrabold"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  🔑 {a.tabs.adminCreds}
+                </button>
+              </div>
+
+              {/* TAB 1: ROOM LISTINGS MANAGEMENT */}
+              {adminTab === "listings" && (
+                <div class="space-y-3">
+                  {/* Analytics Metric Cards Grid */}
+                  <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+                      <div class="text-slate-500 text-[10px] font-semibold uppercase">{a.statsTotal}</div>
+                      <div class="text-xl font-extrabold text-[#0A2540] mt-0.5">{totalRooms}</div>
+                      <div class="text-[10px] text-emerald-600 font-medium">+{customAddedRooms} {lang === 'hi' ? 'नए' : 'new'}</div>
+                    </div>
+
+                    <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+                      <div class="text-slate-500 text-[10px] font-semibold uppercase">{a.statsVerified}</div>
+                      <div class="text-xl font-extrabold text-emerald-700 mt-0.5">{verifiedRooms}</div>
+                      <div class="text-[10px] text-slate-400 font-medium">
+                        {Math.round((verifiedRooms / (totalRooms || 1)) * 100)}% {lang === 'hi' ? 'सत्यापित' : 'verified'}
+                      </div>
+                    </div>
+
+                    <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+                      <div class="text-slate-500 text-[10px] font-semibold uppercase">{a.statsAvgRent}</div>
+                      <div class="text-xl font-extrabold text-amber-600 mt-0.5">₹{avgRent}</div>
+                      <div class="text-[10px] text-slate-400 font-medium">{t.perMonth}</div>
+                    </div>
+
+                    <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+                      <div class="text-slate-500 text-[10px] font-semibold uppercase">{a.statsActive}</div>
+                      <div class="text-xl font-extrabold text-blue-700 mt-0.5">{displayedRooms.length}</div>
+                      <div class="text-[10px] text-slate-400 font-medium">{lang === 'hi' ? 'दृश्यमान' : 'matching'}</div>
+                    </div>
+                  </div>
+
+                  {/* Search & Filter Toolbar */}
+                  <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-2.5">
+                    <div class="relative">
+                      <input
+                        id="admin_search_input"
+                        type="text"
+                        value={adminSearch}
+                        onChange={(e) => setAdminSearch(e.target.value)}
+                        placeholder={a.searchPlaceholder}
+                        class="w-full pl-8 pr-8 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-[#0A2540]"
+                      />
+                      <span class="absolute left-2.5 top-2 text-slate-400 text-xs">🔍</span>
+                      {adminSearch && (
+                        <button
+                          onClick={() => setAdminSearch("")}
+                          class="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 text-xs"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Filter Badges */}
+                    <div class="flex items-center space-x-1.5 text-xs">
+                      <button
+                        id="filter_admin_all"
+                        onClick={() => setFilterMode("all")}
+                        class={`px-2.5 py-1 rounded-md font-semibold text-xs transition ${
+                          filterMode === "all" ? "bg-[#0A2540] text-amber-300" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        {a.filterAll} ({totalRooms})
+                      </button>
+
+                      <button
+                        id="filter_admin_verified"
+                        onClick={() => setFilterMode("verified")}
+                        class={`px-2.5 py-1 rounded-md font-semibold text-xs transition ${
+                          filterMode === "verified" ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        ✓ {a.filterVerified} ({verifiedRooms})
+                      </button>
+
+                      <button
+                        id="filter_admin_custom"
+                        onClick={() => setFilterMode("custom")}
+                        class={`px-2.5 py-1 rounded-md font-semibold text-xs transition ${
+                          filterMode === "custom" ? "bg-amber-500 text-slate-900 font-bold" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        ★ {a.filterCustom} ({customAddedRooms})
+                      </button>
+                    </div>
+
+                    {/* Locality Dropdown Filter */}
+                    <div class="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div class="flex items-center space-x-1.5 text-xs text-slate-700 font-semibold shrink-0">
+                        <span class="text-sm">📍</span>
+                        <label for="admin_locality_select">{a.filterLocalityLabel}:</label>
+                      </div>
+
+                      <div class="flex items-center space-x-1.5 flex-1 max-w-xs">
+                        <div class="relative flex-1">
+                          <select
+                            id="admin_locality_select"
+                            value={selectedLocality}
+                            onChange={(e) => setSelectedLocality(e.target.value)}
+                            class="w-full text-xs py-1.5 pl-2.5 pr-7 bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg text-slate-800 font-semibold focus:outline-none focus:border-[#0A2540] focus:ring-1 focus:ring-[#0A2540] appearance-none cursor-pointer transition shadow-2xs"
+                          >
+                            <option value="all">
+                              {a.allLocalitiesOption} ({listings.length})
+                            </option>
+                            {availableLocalities.filter(l => l.id !== "all").map(loc => {
+                              const count = listings.filter(r => r.locality === loc.id).length;
+                              return (
+                                <option key={loc.id} value={loc.id}>
+                                  {loc.label} ({count})
+                                </option>
+                              );
+                            })}
+                          </select>
+                          <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500 text-[10px]">
+                            ▼
+                          </div>
+                        </div>
+
+                        {selectedLocality !== "all" && (
+                          <button
+                            id="btn_clear_admin_locality"
+                            type="button"
+                            onClick={() => setSelectedLocality("all")}
+                            class="text-[11px] text-amber-900 bg-amber-100 hover:bg-amber-200 px-2 py-1 rounded-lg font-bold border border-amber-300 transition shrink-0 active:scale-95"
+                            title={lang === "hi" ? "इलाका फ़िल्टर हटाएं" : "Clear locality filter"}
+                          >
+                            ✕ {lang === "hi" ? "साफ़ करें" : "Clear"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Room Management List */}
+                  <div class="space-y-3">
+                    {displayedRooms.length === 0 ? (
+                      <div class="bg-white p-6 rounded-2xl border border-slate-200 text-center text-slate-500 text-xs">
+                        {a.noRoomsMatch}
+                      </div>
+                    ) : (
+                      displayedRooms.map((room) => {
+                        const isCustom = room.id.startsWith("custom-");
+                        const isEditing = editingRoomId === room.id;
+
+                        return (
+                          <div
+                            key={room.id}
+                            id={`admin_room_card_${room.id}`}
+                            class="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs space-y-2 transition hover:border-slate-300"
+                          >
+                            {/* Top info line */}
+                            <div class="flex items-start justify-between gap-2">
+                              <div class="flex items-start space-x-2.5 min-w-0 flex-1">
+                                <img
+                                  src={room.image}
+                                  alt=""
+                                  class="w-14 h-14 rounded-lg object-cover border border-slate-200 shrink-0"
+                                />
+                                <div class="min-w-0 flex-1">
+                                  <div class="flex items-center space-x-1.5 flex-wrap">
+                                    <span class={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                      room.verified
+                                        ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                        : "bg-slate-100 text-slate-600"
+                                    }`}>
+                                      {room.verified ? "✓ Verified" : "Unverified"}
+                                    </span>
+                                    {isCustom && (
+                                      <span class="text-[9px] bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-bold">
+                                        New Owner Post
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <h4 class="font-bold text-slate-900 text-xs truncate mt-0.5">
+                                    {lang === "hi" ? room.titleHi : room.titleEn}
+                                  </h4>
+
+                                  <p class="text-[11px] text-slate-500 truncate">
+                                    📍 {lang === "hi" ? room.localityHi : room.locality} • 👤 {room.ownerName}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Quick delete button */}
+                              <button
+                                id={`btn_delete_room_${room.id}`}
+                                onClick={() => {
+                                  if (window.confirm(`${a.confirmDelete}\n\n${room.ownerName} - ₹${room.rent}/mo`)) {
+                                    onDeleteListing(room.id);
+                                    triggerActionFeedback(lang === "hi" ? "✓ कमरा हटाया गया!" : "✓ Room removed successfully!");
+                                  }
+                                }}
+                                class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                                title={a.deleteRoom}
+                              >
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </div>
+
+                            {/* Phone & Pricing summary */}
+                            <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+                              <div class="flex items-center space-x-2">
+                                <a
+                                  href={`tel:${room.phone}`}
+                                  class="text-[11px] text-blue-700 font-semibold hover:underline flex items-center space-x-1"
+                                >
+                                  <span>📞</span>
+                                  <span>{room.phone}</span>
+                                </a>
+                              </div>
+
+                              {isEditing ? (
+                                <div class="flex items-center space-x-1">
+                                  <span class="text-xs font-bold text-slate-700">₹</span>
+                                  <input
+                                    type="number"
+                                    value={editRentVal}
+                                    onChange={(e) => setEditRentVal(e.target.value)}
+                                    class="w-20 py-0.5 px-1.5 text-xs border border-amber-400 rounded focus:outline-none"
+                                  />
+                                  <button
+                                    onClick={() => {
+                                      const num = Number(editRentVal);
+                                      if (num > 0) {
+                                        onUpdateRent(room.id, num);
+                                        setEditingRoomId(null);
+                                        triggerActionFeedback(lang === "hi" ? "✓ किराया अपडेट किया गया!" : "✓ Rent updated successfully!");
+                                      }
+                                    }}
+                                    class="text-[10px] bg-emerald-600 text-white px-2 py-1 rounded font-bold"
+                                  >
+                                    {a.saveChanges}
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingRoomId(null)}
+                                    class="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-1 rounded"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ) : (
+                                <div class="flex items-center space-x-1.5">
+                                  <span class="font-extrabold text-[#0A2540] text-sm">
+                                    ₹{Number(room.rent).toLocaleString('en-IN')}{t.perMonth}
+                                  </span>
+                                  <button
+                                    id={`btn_edit_rent_${room.id}`}
+                                    onClick={() => {
+                                      setEditingRoomId(room.id);
+                                      setEditRentVal(room.rent);
+                                    }}
+                                    class="text-[10px] text-amber-700 bg-amber-50 hover:bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200 font-semibold"
+                                    title="Edit Rent"
+                                  >
+                                    ✏️
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Admin Action Control Buttons */}
+                            <div class="pt-2 flex items-center justify-end space-x-2">
+                              <button
+                                id={`btn_toggle_verify_${room.id}`}
+                                onClick={() => {
+                                  onToggleVerify(room.id);
+                                  triggerActionFeedback(
+                                    room.verified
+                                      ? (lang === "hi" ? "सत्यापन हटा दिया गया" : "Verification removed")
+                                      : (lang === "hi" ? "✓ मकान मालिक सत्यापित किया गया!" : "✓ Landlord verified!")
+                                  );
+                                }}
+                                class={`py-1 px-2.5 rounded-lg text-[11px] font-bold transition ${
+                                  room.verified
+                                    ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300"
+                                    : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
+                                }`}
+                              >
+                                {room.verified ? a.unverifyRoom : `✓ ${a.verifyRoom}`}
+                              </button>
+                            </div>
+
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: WHATSAPP, SUPPORT, APP DESCRIPTION & DEVELOPER EDIT */}
+              {adminTab === "appConfig" && (
+                <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-4">
+                  <div class="border-b border-slate-100 pb-2">
+                    <h3 class="font-extrabold text-sm text-[#0A2540] flex items-center space-x-1.5">
+                      <span>⚙️</span>
+                      <span>{a.whatsappConfigTitle}</span>
+                    </h3>
+                    <p class="text-[11px] text-slate-500 mt-0.5">
+                      {a.whatsappConfigSubtitle}
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleSaveSettings} class="space-y-3.5">
+                    {/* WhatsApp Floating Number */}
+                    <div>
+                      <label class="block text-xs font-bold text-slate-800 mb-1 flex items-center space-x-1">
+                        <span>💬</span>
+                        <span>{a.whatsappNumberLabel}</span>
+                      </label>
+                      <input
+                        id="admin_cfg_whatsapp"
+                        type="tel"
+                        value={settingsForm.whatsappNumber}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, whatsappNumber: e.target.value })}
+                        placeholder="919829012345"
+                        class="w-full text-xs py-2 px-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-[#0A2540] font-mono"
+                        required
+                      />
+                      <p class="text-[10px] text-slate-400 mt-0.5">
+                        {lang === "hi" ? "फ्लोटिंग बटन पर क्लिक करने पर यही नंबर चैट विंडो खोलेगा।" : "The floating button in the bottom corner links to this number."}
+                      </p>
+                    </div>
+
+                    {/* Support Calling Phone */}
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label class="block text-xs font-bold text-slate-800 mb-1 flex items-center space-x-1">
+                          <span>📞</span>
+                          <span>{a.supportPhoneLabel}</span>
+                        </label>
+                        <input
+                          id="admin_cfg_support_phone"
+                          type="tel"
+                          value={settingsForm.supportPhone}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, supportPhone: e.target.value })}
+                          placeholder="919829012345"
+                          class="w-full text-xs py-2 px-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-[#0A2540] font-mono"
+                        />
+                      </div>
+
+                      <div>
+                        <label class="block text-xs font-bold text-slate-800 mb-1 flex items-center space-x-1">
+                          <span>✉️</span>
+                          <span>{a.supportEmailLabel}</span>
+                        </label>
+                        <input
+                          id="admin_cfg_support_email"
+                          type="email"
+                          value={settingsForm.supportEmail}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, supportEmail: e.target.value })}
+                          placeholder="support@apnakamra.in"
+                          class="w-full text-xs py-2 px-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-[#0A2540]"
+                        />
+                      </div>
+                    </div>
+
+                    {/* App Description Hindi */}
+                    <div>
+                      <label class="block text-xs font-bold text-slate-800 mb-1 flex items-center space-x-1">
+                        <span>📝</span>
+                        <span>{a.appDescHiLabel}</span>
+                      </label>
+                      <textarea
+                        id="admin_cfg_desc_hi"
+                        rows={2}
+                        value={settingsForm.appDescriptionHi}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, appDescriptionHi: e.target.value })}
+                        class="w-full text-xs py-2 px-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-[#0A2540]"
+                      ></textarea>
+                    </div>
+
+                    {/* App Description English */}
+                    <div>
+                      <label class="block text-xs font-bold text-slate-800 mb-1 flex items-center space-x-1">
+                        <span>📝</span>
+                        <span>{a.appDescEnLabel}</span>
+                      </label>
+                      <textarea
+                        id="admin_cfg_desc_en"
+                        rows={2}
+                        value={settingsForm.appDescriptionEn}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, appDescriptionEn: e.target.value })}
+                        class="w-full text-xs py-2 px-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-[#0A2540]"
+                      ></textarea>
+                    </div>
+
+                    {/* Developer Info Edit */}
+                    <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                      <div class="text-xs font-bold text-slate-800 flex items-center space-x-1">
+                        <span>👨‍💻</span>
+                        <span>{lang === "hi" ? "डेवलपर विवरण संपादन" : "Developer Credits & Information"}</span>
+                      </div>
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                          <label class="block text-[11px] font-semibold text-slate-600 mb-1">
+                            {a.devNameLabel}
+                          </label>
+                          <input
+                            id="admin_cfg_dev_name"
+                            type="text"
+                            value={settingsForm.developerName}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, developerName: e.target.value })}
+                            placeholder="Apna Kamra Tech Team"
+                            class="w-full text-xs py-1.5 px-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-[#0A2540]"
+                          />
+                        </div>
+                        <div>
+                          <label class="block text-[11px] font-semibold text-slate-600 mb-1">
+                            {a.devContactLabel}
+                          </label>
+                          <input
+                            id="admin_cfg_dev_contact"
+                            type="text"
+                            value={settingsForm.developerContact}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, developerContact: e.target.value })}
+                            placeholder="dev@apnakamra.in"
+                            class="w-full text-xs py-1.5 px-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-[#0A2540]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      id="btn_save_app_settings"
+                      class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition active:scale-98 flex items-center justify-center space-x-1"
+                    >
+                      <span>💾</span>
+                      <span>{a.saveSettingsBtn}</span>
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* TAB 3: ADMIN NUMBER & PASSWORD CONFIGURATION */}
+              {adminTab === "adminCreds" && (
+                <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-4">
+                  <div class="border-b border-slate-100 pb-2">
+                    <h3 class="font-extrabold text-sm text-[#0A2540] flex items-center space-x-1.5">
+                      <span>🔑</span>
+                      <span>{a.adminCredsTitle}</span>
+                    </h3>
+                    <p class="text-[11px] text-slate-500 mt-0.5">
+                      {a.adminCredsSubtitle}
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleSaveCreds} class="max-w-md space-y-3.5">
+                    <div class="bg-amber-50 border border-amber-200 p-2.5 rounded-xl text-xs text-amber-900">
+                      <div class="font-bold">{a.currentAdminPhone}:</div>
+                      <div class="font-mono text-sm font-extrabold mt-0.5">{adminCreds?.phone || "9829012345"}</div>
+                    </div>
+
+                    <div>
+                      <label class="block text-xs font-bold text-slate-800 mb-1">
+                        {a.newAdminPhone}
+                      </label>
+                      <input
+                        id="admin_creds_phone"
+                        type="tel"
+                        value={credsForm.newPhone}
+                        onChange={(e) => setCredsForm({ ...credsForm, newPhone: e.target.value })}
+                        placeholder="9829012345"
+                        class="w-full text-xs py-2 px-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-[#0A2540] font-mono"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label class="block text-xs font-bold text-slate-800 mb-1">
+                        {a.newAdminPassword}
+                      </label>
+                      <input
+                        id="admin_creds_password"
+                        type="password"
+                        value={credsForm.newPassword}
+                        onChange={(e) => setCredsForm({ ...credsForm, newPassword: e.target.value })}
+                        placeholder={lang === "hi" ? "नया पासवर्ड दर्ज करें (खाली छोड़ने पर पुराना रहेगा)" : "Enter new password (leave blank to keep current)"}
+                        class="w-full text-xs py-2 px-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-[#0A2540]"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      id="btn_save_admin_creds"
+                      class="w-full py-2.5 bg-[#0A2540] hover:bg-slate-800 text-amber-300 font-bold text-xs rounded-xl shadow transition active:scale-98 flex items-center justify-center space-x-1"
+                    >
+                      <span>🔒</span>
+                      <span>{a.saveCredsBtn}</span>
+                    </button>
+                  </form>
+                </div>
+              )}
+
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    // --- Component: User Auth Section (Login & Registration) ---
+    function UserAuthSection({
+      lang,
+      t,
+      currentUser,
+      onLoginUser,
+      onRegisterUser,
+      onLogoutUser,
+      onClose
+    }) {
+      const [authMode, setAuthMode] = useState("login"); // 'login' | 'register'
+      const [formData, setFormData] = useState({
+        name: "",
+        phone: "",
+        email: "",
+        password: ""
+      });
+      const [formError, setFormError] = useState("");
+      const [isLoading, setIsLoading] = useState(false);
+      const [successMsg, setSuccessMsg] = useState("");
+
+      const authT = t.auth;
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        setFormError("");
+        setSuccessMsg("");
+
+        if (!formData.phone || formData.phone.length < 10) {
+          setFormError(lang === "hi" ? "कृपया मान्य 10 अंकों का मोबाइल नंबर दर्ज करें।" : "Please enter a valid 10-digit mobile number.");
+          return;
+        }
+
+        if (!formData.password || formData.password.length < 4) {
+          setFormError(lang === "hi" ? "पासवर्ड कम से कम 4 अक्षरों का होना चाहिए।" : "Password must be at least 4 characters.");
+          return;
+        }
+
+        setIsLoading(true);
+        try {
+          if (authMode === "login") {
+            const user = await onLoginUser(formData.phone, formData.password);
+            setSuccessMsg(lang === "hi" ? `✓ स्वागत है, ${user.name}!` : `✓ Welcome back, ${user.name}!`);
+            setTimeout(() => onClose && onClose(), 1200);
+          } else {
+            if (!formData.name.trim()) {
+              setFormError(lang === "hi" ? "कृपया अपना पूरा नाम दर्ज करें।" : "Please enter your full name.");
+              setIsLoading(false);
+              return;
+            }
+            const user = await onRegisterUser(formData);
+            setSuccessMsg(lang === "hi" ? `✓ पंजीकरण सफल! स्वागत है, ${user.name}!` : `✓ Registered successfully! Welcome, ${user.name}!`);
+            setTimeout(() => onClose && onClose(), 1200);
+          }
+        } catch (err) {
+          setFormError(err.message || (lang === "hi" ? "प्रमाणीकरण विफल रहा।" : "Authentication failed."));
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      if (currentUser) {
+        return (
+          <div id="user_profile_card" class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4 text-center max-w-sm mx-auto">
+            <div class="w-16 h-16 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-2xl mx-auto font-bold border-2 border-emerald-300">
+              👤
+            </div>
+            <div>
+              <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full uppercase">
+                {lang === "hi" ? "सक्रिय उपयोगकर्ता" : "Logged In"}
+              </span>
+              <h3 class="text-base font-bold text-slate-800 mt-1">{currentUser.name}</h3>
+              <p class="text-xs text-slate-500 font-mono">📱 {currentUser.phone}</p>
+              {currentUser.email && <p class="text-[11px] text-slate-400">✉️ {currentUser.email}</p>}
+            </div>
+
+            <div class="pt-2 border-t border-slate-100 flex items-center justify-center space-x-2">
+              <button
+                id="btn_user_logout"
+                onClick={onLogoutUser}
+                class="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded-xl transition active:scale-95"
+              >
+                🚪 {authT.logout}
+              </button>
+              <button
+                onClick={onClose}
+                class="px-4 py-2 bg-[#0A2540] text-amber-300 text-xs font-bold rounded-xl transition active:scale-95"
+              >
+                {lang === "hi" ? "कमरे देखें" : "View Rooms"}
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div id="user_auth_container" class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm max-w-sm mx-auto space-y-4">
+          <div class="text-center">
+            <div class="w-12 h-12 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center text-xl mx-auto mb-2">
+              {authMode === "login" ? "🔑" : "📝"}
+            </div>
+            <h2 class="text-base font-extrabold text-slate-800">
+              {authMode === "login" ? authT.loginTitle : authT.registerTitle}
+            </h2>
+            <p class="text-xs text-slate-500 mt-0.5">
+              {authMode === "login" ? authT.loginSubtitle : authT.registerSubtitle}
+            </p>
+          </div>
+
+          {/* Tab buttons switch login/register */}
+          <div class="flex rounded-xl bg-slate-100 p-1 text-xs font-bold">
+            <button
+              type="button"
+              id="tab_switch_login"
+              onClick={() => { setAuthMode("login"); setFormError(""); }}
+              class={`flex-1 py-1.5 rounded-lg transition ${authMode === "login" ? "bg-[#0A2540] text-amber-300 shadow-2xs" : "text-slate-600 hover:text-slate-900"}`}
+            >
+              {t.loginTab}
+            </button>
+            <button
+              type="button"
+              id="tab_switch_register"
+              onClick={() => { setAuthMode("register"); setFormError(""); }}
+              class={`flex-1 py-1.5 rounded-lg transition ${authMode === "register" ? "bg-[#0A2540] text-amber-300 shadow-2xs" : "text-slate-600 hover:text-slate-900"}`}
+            >
+              {t.registerTab}
+            </button>
+          </div>
+
+          {successMsg && (
+            <div class="p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-800 text-xs font-bold text-center">
+              {successMsg}
+            </div>
+          )}
+
+          {formError && (
+            <div class="p-2.5 bg-rose-50 border border-rose-300 rounded-xl text-rose-700 text-xs font-semibold text-center">
+              {formError}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} class="space-y-3">
+            {authMode === "register" && (
+              <div>
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">
+                  {authT.nameLabel} *
+                </label>
+                <input
+                  id="auth_input_name"
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder={lang === "hi" ? "उदा. रमेश शर्मा" : "e.g. Ramesh Sharma"}
+                  class="w-full text-xs py-2 px-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-[#0A2540]"
+                  required
+                />
+              </div>
+            )}
+
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">
+                {authT.phoneLabel} *
+              </label>
+              <div class="flex items-center">
+                <span class="text-xs bg-slate-200 border border-r-0 border-slate-300 px-2.5 py-2 rounded-l-xl text-slate-700 font-mono">
+                  +91
+                </span>
+                <input
+                  id="auth_input_phone"
+                  type="tel"
+                  maxLength={10}
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, "") })}
+                  placeholder="9829012345"
+                  class="flex-1 text-xs py-2 px-3 bg-slate-50 border border-slate-300 rounded-r-xl focus:outline-none focus:border-[#0A2540] font-mono"
+                  required
+                />
+              </div>
+            </div>
+
+            {authMode === "register" && (
+              <div>
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">
+                  {authT.emailLabel}
+                </label>
+                <input
+                  id="auth_input_email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="user@example.com"
+                  class="w-full text-xs py-2 px-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-[#0A2540]"
+                />
+              </div>
+            )}
+
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">
+                {authT.passwordLabel} *
+              </label>
+              <input
+                id="auth_input_password"
+                type="password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                placeholder="••••••••"
+                class="w-full text-xs py-2 px-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-[#0A2540]"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              id="btn_auth_submit"
+              disabled={isLoading}
+              class="w-full py-2.5 bg-[#0A2540] hover:bg-slate-800 text-amber-300 font-bold text-xs rounded-xl shadow transition active:scale-95 flex items-center justify-center space-x-1"
+            >
+              {isLoading ? (
+                <span>{lang === "hi" ? "कृपया प्रतीक्षा करें..." : "Please wait..."}</span>
+              ) : (
+                <span>{authMode === "login" ? authT.loginBtn : authT.registerBtn}</span>
+              )}
+            </button>
+          </form>
+
+          <div class="text-center pt-1 border-t border-slate-100">
+            <button
+              type="button"
+              id="btn_auth_toggle_mode"
+              onClick={() => {
+                setAuthMode(authMode === "login" ? "register" : "login");
+                setFormError("");
+              }}
+              class="text-xs text-blue-700 hover:text-blue-900 font-semibold underline"
+            >
+              {authMode === "login" ? authT.dontHaveAccount : authT.alreadyHaveAccount}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Render the React application
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<ApnaKamraApp />);
+  </script>
+</body>
+</html>

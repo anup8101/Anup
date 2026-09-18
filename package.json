@@ -1,0 +1,13 @@
+{
+  "name": "apna-kamra-jaipur",
+  "version": "1.0.0",
+  "description": "Apna Kamra Jaipur - Affordable Rental Housing for Workers and Families in Jaipur",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  },
+  "keywords": ["jaipur", "housing", "rentals", "affordable", "workers"],
+  "author": "Apna Kamra Jaipur Team",
+  "license": "MIT"
+}
